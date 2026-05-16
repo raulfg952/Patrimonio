@@ -4933,21 +4933,29 @@ const YAHOO_SYMBOLS = {
 // ── 1. ACTUALIZAR VL desde ironia.tech ───────────────────────────────────
 async function testCORS() {
   const dbg = document.getElementById('vl-debug');
-  if (dbg) { dbg.style.display='block'; dbg.innerHTML='<div style="color:var(--text3)">Test CORS...</div>'; }
+  if (dbg) { dbg.style.display='block'; dbg.innerHTML='<div style="color:var(--text3)">Test proxies CORS...</div>'; }
+
+  const TARGET_YAHOO  = 'https://query1.finance.yahoo.com/v8/finance/chart/IE00BYX5NX33.SG?interval=1d&range=5d';
+  const TARGET_IRONIA = 'https://ironia.tech/renta-variable/cobas-am/cobas-international-p-eur/LU1598719752';
+
   const tests = [
-    { name: 'Yahoo IE00BYX5NX33.SG', url: 'https://query1.finance.yahoo.com/v8/finance/chart/IE00BYX5NX33.SG?interval=1d&range=5d' },
-    { name: 'Yahoo 0P00019W2R.F (Cobas)', url: 'https://query1.finance.yahoo.com/v8/finance/chart/0P00019W2R.F?interval=1d&range=5d' },
-    { name: 'Ironia Cobas', url: 'https://ironia.tech/renta-variable/cobas-am/cobas-international-p-eur/LU1598719752' },
+    { name: 'Directo Yahoo',           url: TARGET_YAHOO },
+    { name: 'corsproxy.io + Yahoo',    url: 'https://corsproxy.io/?' + encodeURIComponent(TARGET_YAHOO) },
+    { name: 'allorigins + Yahoo',      url: 'https://api.allorigins.win/get?url=' + encodeURIComponent(TARGET_YAHOO) },
+    { name: 'corsproxy.io + Ironia',   url: 'https://corsproxy.io/?' + encodeURIComponent(TARGET_IRONIA) },
+    { name: 'allorigins + Ironia',     url: 'https://api.allorigins.win/get?url=' + encodeURIComponent(TARGET_IRONIA) },
   ];
+
   for (const t of tests) {
     try {
       const r = await fetch(t.url);
       const text = await r.text();
-      const preview = text.slice(0,80).replace(/\n/g,' ');
-      if (dbg) dbg.innerHTML += `<div style="color:${r.ok?'var(--green)':'var(--amber)'}">${r.status} ${t.name}: ${preview}</div>`;
+      const hasVL = text.includes('valor liquidativo') || text.includes('regularMarketPrice') || text.includes('chart');
+      if (dbg) dbg.innerHTML += `<div style="color:${r.ok?'var(--green)':'var(--amber)'}">${r.status} ${t.name} ${hasVL?'✓ tiene datos':'(sin datos útiles)'}</div>`;
     } catch(e) {
       if (dbg) dbg.innerHTML += `<div style="color:var(--red)">✗ ${t.name}: ${e.message}</div>`;
     }
+    await new Promise(r => setTimeout(r, 500));
   }
 }
 
