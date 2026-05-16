@@ -4930,48 +4930,31 @@ const YAHOO_SYMBOLS = {
   'JE00BN574F90':  'WIZZ.L',
 };
 
-// ── 1. ACTUALIZAR VL desde ironia.tech ───────────────────────────────────
-async function testCORS() {
-  const dbg = document.getElementById('vl-debug');
-  if (dbg) { dbg.style.display='block'; dbg.innerHTML='<div style="color:var(--text3)">Test proxies CORS...</div>'; }
+// ── PROXY ────────────────────────────────────────────────────────────────
+const CORS_PROXY = 'https://api.allorigins.win/get?url=';
 
-  const TARGET_YAHOO  = 'https://query1.finance.yahoo.com/v8/finance/chart/IE00BYX5NX33.SG?interval=1d&range=5d';
-  const TARGET_IRONIA = 'https://ironia.tech/renta-variable/cobas-am/cobas-international-p-eur/LU1598719752';
-
-  const tests = [
-    { name: 'Directo Yahoo',           url: TARGET_YAHOO },
-    { name: 'corsproxy.io + Yahoo',    url: 'https://corsproxy.io/?' + encodeURIComponent(TARGET_YAHOO) },
-    { name: 'allorigins + Yahoo',      url: 'https://api.allorigins.win/get?url=' + encodeURIComponent(TARGET_YAHOO) },
-    { name: 'corsproxy.io + Ironia',   url: 'https://corsproxy.io/?' + encodeURIComponent(TARGET_IRONIA) },
-    { name: 'allorigins + Ironia',     url: 'https://api.allorigins.win/get?url=' + encodeURIComponent(TARGET_IRONIA) },
-  ];
-
-  for (const t of tests) {
-    try {
-      const r = await fetch(t.url);
-      const text = await r.text();
-      const hasVL = text.includes('valor liquidativo') || text.includes('regularMarketPrice') || text.includes('chart');
-      if (dbg) dbg.innerHTML += `<div style="color:${r.ok?'var(--green)':'var(--amber)'}">${r.status} ${t.name} ${hasVL?'✓ tiene datos':'(sin datos útiles)'}</div>`;
-    } catch(e) {
-      if (dbg) dbg.innerHTML += `<div style="color:var(--red)">✗ ${t.name}: ${e.message}</div>`;
-    }
-    await new Promise(r => setTimeout(r, 500));
-  }
+async function fetchProxy(url) {
+  const r = await fetch(CORS_PROXY + encodeURIComponent(url));
+  const d = await r.json();
+  return d.contents;
 }
 
+// ── 1. ACTUALIZAR VL actual — Yahoo Finance via allorigins ────────────────
 async function actualizarVLIronia() {
-  const btn = document.getElementById('btn-actualizar-vl');
+  const btn  = document.getElementById('btn-actualizar-vl');
   const prog = document.getElementById('vl-progress');
   const dbg  = document.getElementById('vl-debug');
-  const isins = Object.keys(IRONIA_URLS);
+  const isins = Object.keys(YAHOO_SYMBOLS);
   let ok = 0, fail = 0;
+  const today = new Date().toISOString().slice(0,10);
 
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ 0/' + isins.length; }
+  if (btn)  { btn.disabled = true; btn.textContent = '⏳ 0/' + isins.length; }
   if (prog) prog.style.display = 'block';
-  if (dbg)  { dbg.style.display = 'block'; dbg.innerHTML = '<div style="color:var(--text3)">Consultando ironia.tech...</div>'; }
+  if (dbg)  { dbg.style.display = 'block'; dbg.innerHTML = '<div style="color:var(--text3)">Obteniendo VL actuales via Yahoo Finance...</div>'; }
 
   for (let i = 0; i < isins.length; i++) {
-    const isin = isins[i];
+    const isin   = isins[i];
+    const symbol = YAHOO_SYMBOLS[isin];
     if (btn) btn.textContent = `⏳ ${i+1}/${isins.length}`;
     if (prog) prog.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px">
@@ -4980,32 +4963,31 @@ async function actualizarVLIronia() {
         </div>
         <span style="font-size:10px;color:var(--text3)">${i+1}/${isins.length}</span>
         <span style="font-size:10px;color:var(--green)">✓ ${ok}</span>
-        ${fail>0?`<span style="font-size:10px;color:var(--red)">✗ ${fail}</span>`:''}
+        ${fail>0?`<span style="font-size:10px;color:var(--amber)">— ${fail}</span>`:''}
       </div>`;
 
     try {
-      const url = IRONIA_URLS[isin];
-      if (!url) { fail++; continue; }
-      const r = await fetch(url);
-      const html = await r.text();
-      // Extract from meta-description: "valor liquidativo de X,XX EUR a fecha DD/MM/YYYY"
-      const m = html.match(/valor liquidativo de ([\d.,]+) EUR a fecha (\d{2}\/\d{2}\/\d{4})/i);
-      if (m) {
-        const vl = parseFloat(m[1].replace('.','').replace(',','.'));
-        const [d,mo,y] = m[2].split('/');
-        const mes = `${y}-${mo}`;
-        vlSet(isin, mes, vl, 'ironia');
+      const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=5d`;
+      const text = await fetchProxy(url);
+      const d    = JSON.parse(text);
+      const meta = d?.chart?.result?.[0]?.meta;
+      const vl   = meta?.regularMarketPrice;
+      const ts   = meta?.regularMarketTime;
+      if (vl && vl > 0) {
+        const fecha = ts ? new Date(ts*1000).toISOString().slice(0,10) : today;
+        const mes   = fecha.slice(0,7);
+        vlSet(isin, mes, vl, 'yahoo');
         ok++;
-        if (dbg) dbg.innerHTML += `<div style="color:var(--green)">✓ ${(ISIN_NAMES[isin]||isin).slice(0,25)}: ${m[1]} € (${m[2]})</div>`;
+        if (dbg) dbg.innerHTML += `<div style="color:var(--green)">✓ ${(ISIN_NAMES[isin]||isin).slice(0,25)}: ${vl} € (${fecha})</div>`;
       } else {
         fail++;
-        if (dbg) dbg.innerHTML += `<div style="color:var(--text3)">— ${isin}: sin datos en ironia.tech</div>`;
+        if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${symbol}: sin precio</div>`;
       }
     } catch(e) {
       fail++;
-      if (dbg) dbg.innerHTML += `<div style="color:var(--red)">✗ ${isin}: ${e.message}</div>`;
+      if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${symbol}: ${e.message.slice(0,40)}</div>`;
     }
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 600));
   }
 
   aplicarVLActuales();
@@ -5013,68 +4995,64 @@ async function actualizarVLIronia() {
   renderCarteraTable();
   localStorage.setItem('ironia_last_update', new Date().toISOString());
 
-  if (btn) { btn.disabled = false; btn.textContent = '🔄 Actualizar VL'; }
-  if (prog) prog.innerHTML = `<div style="color:var(--green);font-size:11px">✓ ${ok} fondos actualizados${fail>0?' · '+fail+' sin datos':''}</div>`;
+  if (btn)  { btn.disabled = false; btn.textContent = '🔄 Actualizar VL'; }
+  if (prog) prog.innerHTML = `<div style="color:var(--green);font-size:11px">✓ ${ok} fondos actualizados${fail>0?' · '+fail+' sin símbolo Yahoo':''}</div>`;
+  const lastUpEl = document.getElementById('vl-last-update');
+  if (lastUpEl) lastUpEl.textContent = 'Actualizado: ' + new Date().toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
   if (document.getElementById('ctab-vl')?.classList.contains('active')) renderVLTabla();
 }
 
-// ── 2. CARGAR HISTÓRICO desde Yahoo Finance ───────────────────────────────
+// ── 2. CARGAR HISTÓRICO — Yahoo Finance via allorigins ────────────────────
 async function cargarHistoricoYahoo(rango) {
-  const btn = document.getElementById('btn-historico-yahoo');
+  const btn  = document.getElementById('btn-historico-yahoo');
   const prog = document.getElementById('vl-progress');
   const dbg  = document.getElementById('vl-debug');
   const isins = Object.keys(YAHOO_SYMBOLS);
   rango = rango || '1y';
   let ok = 0, fail = 0, dias_ok = 0;
 
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Cargando...'; }
+  if (btn)  { btn.disabled = true; btn.textContent = '⏳ Cargando...'; }
   if (prog) prog.style.display = 'block';
   if (dbg)  { dbg.style.display = 'block'; dbg.innerHTML = `<div style="color:var(--text3)">Cargando histórico ${rango} desde Yahoo Finance...</div>`; }
 
   for (let i = 0; i < isins.length; i++) {
-    const isin = isins[i];
+    const isin   = isins[i];
     const symbol = YAHOO_SYMBOLS[isin];
     if (btn) btn.textContent = `⏳ ${i+1}/${isins.length}`;
 
     try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=${rango}`;
-      const r = await fetch(url);
-      const d = await r.json();
+      const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=${rango}`;
+      const text = await fetchProxy(url);
+      const d    = JSON.parse(text);
       const result = d?.chart?.result?.[0];
       if (!result) throw new Error('sin datos');
 
       const timestamps = result.timestamp || [];
       const closes = result.indicators?.quote?.[0]?.close || [];
       let added = 0;
-
       for (let j = 0; j < timestamps.length; j++) {
         const vl = closes[j];
         if (!vl || vl <= 0) continue;
-        const date = new Date(timestamps[j] * 1000);
-        const mes = date.toISOString().slice(0, 7);
-        const dia = date.toISOString().slice(0, 10);
-        // Store with daily granularity key YYYY-MM-DD
+        const dia = new Date(timestamps[j]*1000).toISOString().slice(0,10);
         vlSet(isin, dia, vl, 'yahoo');
         added++;
       }
-
       dias_ok += added;
       ok++;
       if (dbg) dbg.innerHTML += `<div style="color:var(--green)">✓ ${(ISIN_NAMES[isin]||isin).slice(0,25)}: ${added} días</div>`;
     } catch(e) {
       fail++;
-      if (dbg) dbg.innerHTML += `<div style="color:var(--text3)">— ${symbol}: ${e.message}</div>`;
+      if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${symbol}: ${e.message.slice(0,40)}</div>`;
     }
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 600));
   }
 
   aplicarVLActuales();
-  if (btn) { btn.disabled = false; btn.textContent = '📅 Histórico Yahoo'; }
+  if (btn)  { btn.disabled = false; btn.textContent = '📅 Histórico Yahoo'; }
   if (prog) prog.innerHTML = `<div style="color:var(--green);font-size:11px">✓ ${ok} fondos · ${dias_ok} registros diarios${fail>0?' · '+fail+' sin datos':''}</div>`;
   if (document.getElementById('ctab-vl')?.classList.contains('active')) renderVLTabla();
 }
 
-// Badge para nuevas fuentes
 function descargarOperaciones() {
   const header = ['Fecha','ISIN','Nombre','Importe (€)','Participaciones','VL operación','Tipo'];
   const rows = [...ops]
