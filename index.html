@@ -1629,6 +1629,7 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
             <svg viewBox="0 0 16 16"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M2 13h12"/></svg>
             Exportar CSV
           </button>
+          <button class="btn btn-ghost" onclick="testCORS()" style="font-size:11px;color:var(--text3)" title="Test CORS">🧪 Test</button>
           <button class="btn btn-ghost" id="btn-actualizar-vl" onclick="actualizarVLIronia()" style="font-size:11px" title="Obtener último VL desde ironia.tech">
             🔄 Actualizar VL
           </button>
@@ -4930,6 +4931,26 @@ const YAHOO_SYMBOLS = {
 };
 
 // ── 1. ACTUALIZAR VL desde ironia.tech ───────────────────────────────────
+async function testCORS() {
+  const dbg = document.getElementById('vl-debug');
+  if (dbg) { dbg.style.display='block'; dbg.innerHTML='<div style="color:var(--text3)">Test CORS...</div>'; }
+  const tests = [
+    { name: 'Yahoo IE00BYX5NX33.SG', url: 'https://query1.finance.yahoo.com/v8/finance/chart/IE00BYX5NX33.SG?interval=1d&range=5d' },
+    { name: 'Yahoo 0P00019W2R.F (Cobas)', url: 'https://query1.finance.yahoo.com/v8/finance/chart/0P00019W2R.F?interval=1d&range=5d' },
+    { name: 'Ironia Cobas', url: 'https://ironia.tech/renta-variable/cobas-am/cobas-international-p-eur/LU1598719752' },
+  ];
+  for (const t of tests) {
+    try {
+      const r = await fetch(t.url);
+      const text = await r.text();
+      const preview = text.slice(0,80).replace(/\n/g,' ');
+      if (dbg) dbg.innerHTML += `<div style="color:${r.ok?'var(--green)':'var(--amber)'}">${r.status} ${t.name}: ${preview}</div>`;
+    } catch(e) {
+      if (dbg) dbg.innerHTML += `<div style="color:var(--red)">✗ ${t.name}: ${e.message}</div>`;
+    }
+  }
+}
+
 async function actualizarVLIronia() {
   const btn = document.getElementById('btn-actualizar-vl');
   const prog = document.getElementById('vl-progress');
