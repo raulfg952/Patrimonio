@@ -5025,31 +5025,32 @@ const YAHOO_SYMBOLS = {
 };
 
 // ── PROXY ────────────────────────────────────────────────────────────────
-const CORS_PROXIES = [
-  'https://api.allorigins.win/get?url=',
-  'https://api.codetabs.com/v1/proxy?quest=',
-];
+async function fetchWithTimeout(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+    fetch(url)
+      .then(r => r.text())
+      .then(t => { clearTimeout(timer); resolve(t); })
+      .catch(e => { clearTimeout(timer); reject(e); });
+  });
+}
 
-async function fetchProxy(url, timeoutMs = 8000) {
-  for (const proxy of CORS_PROXIES) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const proxyUrl = proxy.includes('allorigins')
-        ? proxy + encodeURIComponent(url)
-        : proxy + encodeURIComponent(url);
-      const r = await fetch(proxyUrl, { signal: controller.signal });
-      // allorigins devuelve { contents: "..." }, codetabs devuelve el texto directo
-      if (proxy.includes('allorigins')) {
-        const d = await r.json();
-        if (d.contents) { clearTimeout(timer); return d.contents; }
-      } else {
-        const text = await r.text();
-        if (text && text.length > 10) { clearTimeout(timer); return text; }
-      }
-    } catch(e) { /* probar siguiente proxy */ }
-    finally { clearTimeout(timer); }
-  }
+async function fetchProxy(url, timeoutMs = 10000) {
+  // Intento 1: allorigins (devuelve JSON con .contents)
+  try {
+    const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+    const text = await fetchWithTimeout(proxyUrl, timeoutMs);
+    const d = JSON.parse(text);
+    if (d && d.contents && d.contents.length > 10) return d.contents;
+  } catch(e) { /* fallback */ }
+
+  // Intento 2: corsproxy.io (devuelve el contenido directo)
+  try {
+    const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
+    const text = await fetchWithTimeout(proxyUrl, timeoutMs);
+    if (text && text.length > 10) return text;
+  } catch(e) { /* fallback */ }
+
   throw new Error('todos los proxies fallaron');
 }
 
