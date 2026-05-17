@@ -466,6 +466,8 @@ tr:hover td { background: rgba(88,166,255,0.05) !important; }
   z-index: 500; align-items: center; justify-content: center;
 }
 .modal-bg.open { display: flex; }
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(4px); z-index: 500; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
 .modal {
   background: var(--bg2); border: 1px solid var(--border2);
   border-radius: var(--r-lg); width: 500px; max-width: 96vw; max-height: 90vh;
@@ -774,10 +776,6 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
     <svg viewBox="0 0 16 16"><rect x="1" y="8" width="3" height="6" rx="1"/><rect x="6" y="4" width="3" height="10" rx="1"/><rect x="11" y="1" width="3" height="13" rx="1"/></svg>
     Análisis
   </div>
-  <div class="nav-item" onclick="nav('operaciones')">
-    <svg viewBox="0 0 16 16"><path d="M2 8h12M10 4l4 4-4 4M6 4L2 8l4 4"/></svg>
-    Operaciones
-  </div>
   <div class="nav-section" style="margin-top:10px">Rendimiento</div>
   <div class="nav-item" onclick="nav('historico')">
     <svg viewBox="0 0 16 16"><polyline points="1,12 5,7 9,10 15,3"/></svg>
@@ -795,6 +793,15 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
   <div class="nav-item" onclick="nav('planificacion')">
     <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
     Planificación
+  </div>
+  <div class="nav-section" style="margin-top:10px">Datos</div>
+  <div class="nav-item" onclick="nav('operaciones')">
+    <svg viewBox="0 0 16 16"><path d="M2 8h12M10 4l4 4-4 4M6 4L2 8l4 4"/></svg>
+    Operaciones
+  </div>
+  <div class="nav-item" onclick="nav('fondos')">
+    <svg viewBox="0 0 16 16"><path d="M2 3h12v2H2zM2 7h12v2H2zM2 11h12v2H2z"/></svg>
+    Fondos
   </div>
 
   <div class="sidebar-footer">
@@ -1235,7 +1242,7 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
     <button class="tab-btn active" onclick="switchCarteraTab('posiciones',this)">📋 Posiciones</button>
     <button class="tab-btn" onclick="switchCarteraTab('comparar',this)">📈 Comparar fondos</button>
     <button class="tab-btn" onclick="switchCarteraTab('ficha',this)">🔍 Ficha de fondo</button>
-    <button class="tab-btn" onclick="switchCarteraTab('vl',this)">📊 Valores liquidativos</button>
+
   </div>
 
   <!-- TAB: POSICIONES -->
@@ -1611,65 +1618,8 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
 
 
-  <!-- ══════════════ TAB: VALORES LIQUIDATIVOS ══════════════ -->
-  <div class="tab-content" id="ctab-vl">
-    <div class="panel" style="margin-bottom:14px">
-      <div class="panel-hdr" style="margin-bottom:14px">
-        <div>
-          <div class="panel-title">Valores Liquidativos</div>
-          <div class="panel-sub">Histórico mensual por fondo · fuente de verdad para precios · editable</div>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <label class="btn btn-ghost" style="cursor:pointer;font-size:11px" title="Importar CSV: Fecha, ISIN, VL">
-            <svg viewBox="0 0 16 16"><path d="M8 12V3M5 6l3-3 3 3"/><path d="M2 13h12"/></svg>
-            Importar CSV
-            <input type="file" accept=".csv,.tsv,.txt" style="display:none" onchange="importarCSVVL(this)">
-          </label>
-          <button class="btn btn-ghost" onclick="exportarCSVVL()" style="font-size:11px">
-            <svg viewBox="0 0 16 16"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M2 13h12"/></svg>
-            Exportar CSV
-          </button>
-          <button class="btn btn-ghost" onclick="testCORS()" style="font-size:11px;color:var(--text3)" title="Test CORS">🧪 Test</button>
-          <button class="btn btn-ghost" id="btn-actualizar-vl" onclick="actualizarVLIronia()" style="font-size:11px" title="Obtener último VL desde ironia.tech">
-            🔄 Actualizar VL
-          </button>
-          <button class="btn btn-ghost" id="btn-historico-yahoo" onclick="mostrarMenuHistorico()" style="font-size:11px" title="Cargar histórico diario desde Yahoo Finance">
-            📅 Histórico Yahoo
-          </button>
-          <button class="btn btn-primary" onclick="abrirModalVL()" style="font-size:11px">
-            <svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12"/></svg>
-            Añadir VL
-          </button>
-        </div>
-      </div>
-      <!-- Filtro fondo -->
-      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
-        <select id="vl-filter-fondo" class="filter-input" style="min-width:220px;font-size:11px" onchange="renderVLTabla()">
-          <option value="">Todos los fondos</option>
-        </select>
-        <span id="vl-count" style="font-size:10px;color:var(--text3)"></span>
-      </div>
-      <div id="vl-progress" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 12px;margin-bottom:8px;font-size:11px"></div>
-      <div id="vl-debug" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 12px;margin-bottom:8px;font-size:10px;font-family:var(--mono);max-height:160px;overflow-y:auto;color:var(--text2)"></div>
-      <div class="tbl-wrap" style="max-height:calc(100vh - 320px)">
-        <table>
-          <thead>
-            <tr>
-              <th>Fondo</th>
-              <th>ISIN</th>
-              <th style="text-align:center">Fecha</th>
-              <th style="text-align:right">VL (€)</th>
-              <th style="text-align:center">Fuente</th>
-              <th style="text-align:center">Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="vl-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div><!-- /ctab-vl -->
 
-</div><!-- /page-cartera -->
+</div><!-- /page-cartera -->>
 
 
 <!-- ═══════════════ ANÁLISIS ═══════════════ -->
@@ -2478,6 +2428,83 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
   </div>
 </div>
 
+<!-- ═══════ MODAL: FONDO ═══════ -->
+<div class="modal-overlay" id="modal-fondo" style="display:none" onclick="if(event.target===this)closeModal('modal-fondo')">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-hdr">
+      <div class="modal-title" id="modal-fondo-title">Añadir fondo</div>
+      <button class="modal-close" onclick="closeModal('modal-fondo')">✕</button>
+    </div>
+    <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <input type="hidden" id="fondo-edit-isin-orig">
+      <div style="grid-column:1/-1">
+        <label class="modal-label">Nombre completo</label>
+        <input id="fondo-nombre" class="filter-input" style="width:100%" placeholder="Fidelity MSCI World Index Fund EUR P Acc">
+      </div>
+      <div>
+        <label class="modal-label">ISIN</label>
+        <input id="fondo-isin" class="filter-input" style="width:100%" placeholder="IE00BYX5NX33">
+      </div>
+      <div>
+        <label class="modal-label">Gestora</label>
+        <input id="fondo-gestora" class="filter-input" style="width:100%" placeholder="Fidelity">
+      </div>
+      <div>
+        <label class="modal-label">Tipo</label>
+        <select id="fondo-tipo" class="filter-input" style="width:100%">
+          <option value="fondo_indexado">F. Indexado</option>
+          <option value="fondo_activo">F. Gestión Activa</option>
+          <option value="fondo_rf">F. Renta Fija</option>
+          <option value="fondo_mixto">F. Mixto</option>
+          <option value="fondo_monetario">F. Monetario</option>
+          <option value="fondo_sectorial">F. Sectorial</option>
+          <option value="accion">Acción</option>
+          <option value="liquidez">Liquidez</option>
+        </select>
+      </div>
+      <div>
+        <label class="modal-label">Zona geográfica</label>
+        <select id="fondo-geo" class="filter-input" style="width:100%">
+          <option value="Global">Global</option>
+          <option value="Europa">Europa</option>
+          <option value="España">España</option>
+          <option value="Norteamérica">Norteamérica</option>
+          <option value="Emergentes">Emergentes</option>
+          <option value="Asia">Asia</option>
+          <option value="China">China</option>
+          <option value="Corea">Corea</option>
+          <option value="Japón">Japón</option>
+        </select>
+      </div>
+      <div>
+        <label class="modal-label">TER anual (%)</label>
+        <input id="fondo-ter" type="number" step="0.01" class="filter-input" style="width:100%" placeholder="0.12">
+      </div>
+      <div>
+        <label class="modal-label">Índice de referencia</label>
+        <input id="fondo-indice" class="filter-input" style="width:100%" placeholder="MSCI World">
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="modal-label">Símbolo Yahoo Finance (para actualización automática)</label>
+        <input id="fondo-yahoo" class="filter-input" style="width:100%" placeholder="IE00BYX5NX33.SG">
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="modal-label">Descripción / Tesis de inversión</label>
+        <textarea id="fondo-desc" class="filter-input" style="width:100%;height:60px;resize:vertical" placeholder="Por qué tienes este fondo en cartera..."></textarea>
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="modal-label">Pesos regionales para el mapa geográfico (JSON, ej: {"Norteamérica":71.5,"Europa":15.8})</label>
+        <textarea id="fondo-regional" class="filter-input" style="width:100%;height:50px;resize:vertical;font-family:var(--mono);font-size:10px" placeholder='{"Norteamérica":71.5,"Europa":15.8,"Japón":5.9}'></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-fondo')">Cancelar</button>
+      <button class="btn btn-ghost" id="btn-eliminar-fondo" onclick="eliminarFondo()" style="color:var(--red);display:none">Eliminar</button>
+      <button class="btn btn-primary" onclick="guardarFondo()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════ MODAL: VL ═══════ -->
 <div class="modal-overlay" id="modal-vl" style="display:none" onclick="if(event.target===this)closeModal('modal-vl')">
   <div class="modal" style="max-width:400px">
@@ -2679,72 +2706,17 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 //  MAESTRO DE FONDOS — fuente: hoja "Fondos" del Excel
 //  Nombres y clasificaciones corregidos 10/04/2026
 // ════════════════════════════════════════════════════════
-const ISIN_NAMES = {
-  // Fondos activos en cartera (fuente: hoja Fondos del Excel)
-  'FR0000989626': 'Groupama Trésorerie IC',
-  'IE00BYX5NX33': 'Fidelity MSCI World Index Fund EUR P Acc',
-  'IE00BYX5MX67': 'Fidelity S&P 500 Index Fund EUR P Acc',
-  'IE00BYX5MD61': 'Fidelity MSCI Europe Index Fund EUR P Acc',
-  'IE00BL1GVT98': 'Neuberger Berman Short Duration Euro Bond Fund',
-  'IE0031786696': 'Vanguard Emerging Markets Stock Index Fund EUR Acc',
-  'LU1694789451': 'DNCA Invest Alpha Bonds',
-  'LU1598719752': 'Cobas Internacional Fund P Acc',
-  'LU2145461757': 'Robeco Smart Energy',
-  'ES0146309002': 'Horos Value Internacional FI',
-  'ES0165243025': 'Myinvestor Value FI',
-  'LU0301637293': 'JPMorgan Funds - Korea Equity Fund',
-  'LU0625737910': 'Pictet-China Index P EUR',
-  'ES0140072028': 'Ábaco Renta Fija Mixta Global C FI',
-  // Acciones
-  'ES0143416115': 'Nueva Expresión Textil (NXT)',
-  'ES0109260531': 'Amper S.A.',
-  'JE00BN574F90': 'Wizz Air Holdings',
-  'LIQUIDEZ_MYINVESTOR': 'Liquidez MyInvestor',
-  // Fondos históricos (cerrados, aparecen en operaciones)
-  'IE00BYX5NX33_old': 'Fidelity MSCI World Index Fund EUR P Acc',
-};
+// ISIN metadata — populated dynamically from FONDOS_DEFAULT + localStorage
+// These are rebuilt by fondosRebuildCaches() on every change
+const ISIN_NAMES = {};
+const ISIN_GEO   = {};
+const ISIN_TIPO  = {};
 
-const ISIN_GEO = {
-  'FR0000989626': 'Europa',        // Groupama Trésorerie — monetario europeo
-  'IE00BYX5NX33': 'Global',
-  'IE00BYX5MX67': 'EEUU',
-  'IE00BYX5MD61': 'Europa',
-  'IE00BL1GVT98': 'Europa',        // Neuberger Berman — RF corto plazo EUR
-  'IE0031786696': 'Emergentes',    // Vanguard Emerging Markets
-  'LU1694789451': 'Global',        // DNCA Alpha Bonds — RF global
-  'LU1598719752': 'Global',        // Cobas Internacional
-  'LU2145461757': 'Global',        // Robeco Smart Energy — sectorial global
-  'ES0146309002': 'Global',        // Horos Value Internacional
-  'ES0165243025': 'Global',        // Myinvestor Value
-  'LU0301637293': 'Asia-Pacífico', // JPMorgan Korea
-  'LU0625737910': 'Asia-Pacífico', // Pictet China
-  'ES0140072028': 'Global',        // Ábaco RF Mixta
-  'ES0143416115': 'España',
-  'ES0109260531': 'España',
-  'JE00BN574F90': 'Europa',
-  'LIQUIDEZ_MYINVESTOR': 'España',
-};
 
-const ISIN_TIPO = {
-  'FR0000989626': 'fondo_monetario', // Groupama Trésorerie — monetario
-  'IE00BYX5NX33': 'fondo_indexado',
-  'IE00BYX5MX67': 'fondo_indexado',
-  'IE00BYX5MD61': 'fondo_indexado',
-  'IE00BL1GVT98': 'fondo_rf',        // Neuberger Berman Short Duration
-  'IE0031786696': 'fondo_indexado',  // Vanguard EM — fondo indexado
-  'LU1694789451': 'fondo_rf',        // DNCA Alpha Bonds
-  'LU1598719752': 'fondo_activo',    // Cobas Internacional
-  'LU2145461757': 'fondo_sectorial', // Robeco Smart Energy
-  'ES0146309002': 'fondo_activo',    // Horos Value
-  'ES0165243025': 'fondo_activo',    // Myinvestor Value
-  'LU0301637293': 'fondo_activo',    // JPMorgan Korea
-  'LU0625737910': 'fondo_indexado',  // Pictet China Index
-  'ES0140072028': 'fondo_mixto',     // Ábaco RF Mixta
-  'ES0143416115': 'accion',
-  'ES0109260531': 'accion',
-  'JE00BN574F90': 'accion',
-  'LIQUIDEZ_MYINVESTOR': 'liquidez',
-};
+
+
+
+
 
 // ════════════════════════════════════════════════════════
 //  VL HISTÓRICO MENSUAL — fuente: hoja "Valor Liquidativo"
@@ -2753,7 +2725,10 @@ const ISIN_TIPO = {
 // VL de cierre de mes — fuente: hoja "💰 Valor Liquidativo" del Excel de MyInvestor
 // Clave = "YYYY-MM" (mes al que corresponde el cierre)
 // NO mezclar con el VL de operación (ese va en RAW_OPS[5] de cada operación)
-const VL_HISTORICO = {
+// VL históricos — seed data loaded into localStorage by vlInitFromCode()
+// Edit via Fondos → Valores Liquidativos
+const VL_HISTORICO = {};
+const VL_HISTORICO_SEED = {
   'ES0140072028': { '2026-02': 9.171,      '2026-03': 9.190,     '2026-04': 9.193 },
   'ES0146309002': { '2026-01': 208.852,    '2026-02': 210.758,   '2026-03': 202.566,  '2026-04': 216.331 },
   'ES0165243025': { '2026-01': 1.217,      '2026-02': 1.218,     '2026-03': 1.124,    '2026-04': 1.215 },
@@ -2771,6 +2746,7 @@ const VL_HISTORICO = {
   'ES0109260531': { '2026-02': 0.1700,     '2026-03': 0.1568,    '2026-04': 0.1852 },
   'ES0143416115': { '2026-02': 0.843,      '2026-03': 0.816,     '2026-04': 0.882 },
 };
+
 
 // ════════════════════════════════════════════════════════
 //  RAW OPERATIONS — fuente: hoja "Movimientos" del Excel
@@ -3237,6 +3213,7 @@ function nav(id) {
     if (id==='dashboard')       renderDashboardNew();
     if (id==='historico')       { renderHistorico(); }
     if (id==='cartera')         { renderCarteraKPIs(); renderCarteraTable(); initFIFOSelect(); setTimeout(fitCarteraTable, 50); }
+    if (id==='fondos')          { renderFondosTabla(); }
     if (id==='analisis')        { renderAnalisis(); }
     if (id==='operaciones')     { renderOperaciones(); renderObTabla(); }
     if (id==='diversificacion') { renderDiversificacion(); renderAlertasProspectivas(); }
@@ -3247,8 +3224,25 @@ function nav(id) {
   } catch(e) { console.error('Error rendering page', id, e); }
 }
 
-function openModal(id) { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = 'flex';
+  el.style.alignItems = 'center';
+  el.style.justifyContent = 'center';
+  el.style.position = 'fixed';
+  el.style.inset = '0';
+  el.style.zIndex = '500';
+  el.style.background = 'rgba(0,0,0,0.8)';
+  el.style.backdropFilter = 'blur(4px)';
+  el.classList.add('open');
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = 'none';
+  el.classList.remove('open');
+}
 document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', e => { if (e.target===m) m.classList.remove('open'); }));
 
 // ════════════════════════════════════════════════════════
@@ -4069,7 +4063,7 @@ function renderCarteraTable() {
       <td class="mono" style="text-align:right;color:var(--text3);font-size:11px">${(()=>{const d=calcDiasEnCartera(a.isin);return d!==null?d+'d':'—';})()}</td>
       <td style="text-align:right;min-width:90px">${objCell}</td>
       <td style="text-align:center">${notaIcon}</td>
-      <td style="text-align:center"><button class="btn btn-ghost" style="padding:3px 8px;font-size:10px" onclick="editActivo('${a.isin}')">Editar</button></td>
+
     </tr>`;
 
   });
@@ -4180,8 +4174,11 @@ const INVESTING_NAME_TO_ISIN = {
 // ════════════════════════════════════════════════════════
 //  VL Y POSICIONES REALES — verificados en MyInvestor 10/04/2026
 // ════════════════════════════════════════════════════════
-const VL_PRECARGADOS = {
-  // Actualizado 15/05/2026 — fuente: MyInvestor
+// VL_PRECARGADOS — últimos VL conocidos, usados como semilla para el sistema de VL
+// Ahora el sistema de VL (localStorage) es la fuente de verdad
+// Estos valores se cargan como semilla en vlInitFromCode si no hay datos más recientes
+const VL_PRECARGADOS = {}; // poblado dinámicamente por aplicarVLActuales()
+const VL_PRECARGADOS_SEED = {
   'IE00BYX5NX33': 13.1140,    // Fidelity MSCI World
   'IE0031786696':  283.6240,   // Vanguard Emerging
   'IE00BYX5MX67':  15.1440,   // Fidelity S&P 500 (sin posición)
@@ -4196,11 +4193,11 @@ const VL_PRECARGADOS = {
   'IE00BL1GVT98':  115.8700,  // Neuberger Berman
   'LU1694789451':  130.2700,  // DNCA Alpha Bonds
   'FR0000989626':  44186.5700, // Groupama
-  // Acciones — precio cierre abril 2026
   'ES0109260531':  0.1852,    // Amper (cierre abr 2026)
   'ES0143416115':  0.882,     // NXT (cierre abr 2026)
   'LIQUIDEZ_MYINVESTOR': 1,
 };
+
 
 // Participaciones exactas calculadas desde los valores reales de MyInvestor
 // valor_MyInvestor / VL_actual = participaciones exactas
@@ -4604,7 +4601,7 @@ function vlInitFromCode() {
   }
   const data = {};
   let changed = false;
-  Object.entries(VL_HISTORICO).forEach(([isin, meses]) => {
+  Object.entries(VL_HISTORICO_SEED).forEach(([isin, meses]) => {
     if (!data[isin]) data[isin] = {};
     Object.entries(meses).forEach(([mes, v]) => {
       // Only set if not already overridden manually
@@ -4628,6 +4625,18 @@ function vlInitFromCode() {
       changed = true;
     }
   });
+  // Also seed from VL_PRECARGADOS_SEED for months not yet in VL_HISTORICO_SEED
+  // Use current month as key for precargados
+  const seedMes = new Date().toISOString().slice(0,7);
+  Object.entries(VL_PRECARGADOS_SEED).forEach(([isin, vl]) => {
+    if (!data[isin]) data[isin] = {};
+    // Only add if no more recent data exists for this month
+    if (!data[isin][seedMes]) {
+      data[isin][seedMes] = { v: vl, f: 'fin_de_mes' };
+      changed = true;
+    }
+  });
+
   if (changed) vlSaveAll(data);
   console.log('VL inicializados:', Object.keys(data).length, 'fondos');
 }
@@ -4811,12 +4820,13 @@ function aplicarVLActuales() {
   liq.cerrado = liq.participaciones <= 0;
   preciosActualizados['LIQUIDEZ_MYINVESTOR'] = true;
 
-  // Aplicar VL más reciente a cada activo
+  // Aplicar VL más reciente a cada activo y actualizar VL_PRECARGADOS
   activos.forEach(a => {
     if (a.isin === 'LIQUIDEZ_MYINVESTOR') return;
     const latest = vlGetLatest(a.isin);
     if (latest) {
       a.precio = latest.vl;
+      VL_PRECARGADOS[a.isin] = latest.vl; // keep VL_PRECARGADOS in sync
       preciosActualizados[a.isin] = true;
     }
   });
@@ -4910,24 +4920,25 @@ const IRONIA_URLS = {
 };
 
 // Mapa ISIN → símbolo Yahoo Finance
+// Símbolos Yahoo Finance — arrays para intentar en orden hasta encontrar precio
 const YAHOO_SYMBOLS = {
-  'IE00BYX5NX33': 'IE00BYX5NX33.SG',
-  'IE0031786696':  '0P00012I6A.F',
-  'IE00BYX5MD61': 'IE00BYX5MD61.SG',
-  'IE00BYX5MX67': 'IE00BYX5MX67.SG',
-  'IE00BL1GVT98': 'IE00BL1GVT98.SG',
-  'LU1598719752': '0P00019W2R.F',
-  'LU1694789451': 'LU1694789451.F',
-  'LU2145461757': 'LU2145461757.F',
-  'ES0165243025': 'ES0165243025.MC',
-  'FR0000989626': '0P00000LRT.F',
-  'LU0625737910': '0P0000TOUY.F',
-  'LU0301637293': 'LU0301637293.F',
-  'ES0146309002': 'ES0146309002.MC',
-  'ES0140072028': 'ES0140072028.MC',
-  'ES0109260531': 'AMP.MC',
-  'ES0143416115': 'NXT.MC',
-  'JE00BN574F90':  'WIZZ.L',
+  'IE00BYX5NX33': ['IE00BYX5NX33.SG', 'IE00BYX5NX33.IR', 'IE00BYX5NX33.F'],
+  'IE0031786696':  ['IE0031786696.IR',  'IE0031786696.SG',  '0P00012I6A.F'],
+  'IE00BYX5MD61': ['IE00BYX5MD61.SG',  'IE00BYX5MD61.IR',  'IE00BYX5MD61.F'],
+  'IE00BYX5MX67': ['IE00BYX5MX67.SG',  'IE00BYX5MX67.IR',  'IE00BYX5MX67.F'],
+  'IE00BL1GVT98': ['IE00BL1GVT98.SG',  'IE00BL1GVT98.IR',  'IE00BL1GVT98.F'],
+  'LU1598719752': ['0P00019W2R.F',      'LU1598719752.SG',  'LU1598719752.F'],
+  'LU1694789451': ['LU1694789451.F',    'LU1694789451.SG'],
+  'LU2145461757': ['LU2145461757.F',    'LU2145461757.SG'],
+  'ES0165243025': ['ES0165243025.MC',   'ES0165243025.SG'],
+  'FR0000989626': ['0P00000LRT.F',      'FR0000989626.PA',  'FR0000989626.F'],
+  'LU0625737910': ['0P0000TOUY.F',      'LU0625737910.SG',  'LU0625737910.F'],
+  'LU0301637293': ['LU0301637293.F',    'LU0301637293.SG'],
+  'ES0146309002': ['ES0146309002.MC',   'ES0146309002.SG'],
+  'ES0140072028': ['ES0140072028.MC',   'ES0140072028.SG'],
+  'ES0109260531': ['AMP.MC'],
+  'ES0143416115': ['NXT.MC'],
+  'JE00BN574F90':  ['WIZZ.L',           'WZZ.L'],
 };
 
 // ── PROXY ────────────────────────────────────────────────────────────────
@@ -4967,25 +4978,35 @@ async function actualizarVLIronia() {
       </div>`;
 
     try {
-      const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=5d`;
-      const text = await fetchProxy(url);
-      const d    = JSON.parse(text);
-      const meta = d?.chart?.result?.[0]?.meta;
-      const vl   = meta?.regularMarketPrice;
-      const ts   = meta?.regularMarketTime;
-      if (vl && vl > 0) {
-        const fecha = ts ? new Date(ts*1000).toISOString().slice(0,10) : today;
-        const mes   = fecha.slice(0,7);
-        vlSet(isin, mes, vl, 'yahoo');
-        ok++;
-        if (dbg) dbg.innerHTML += `<div style="color:var(--green)">✓ ${(ISIN_NAMES[isin]||isin).slice(0,25)}: ${vl} € (${fecha})</div>`;
-      } else {
+      const symbols = Array.isArray(YAHOO_SYMBOLS[isin]) ? YAHOO_SYMBOLS[isin] : [YAHOO_SYMBOLS[isin]];
+      let found = false;
+      for (const sym of symbols) {
+        try {
+          const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=5d`;
+          const text = await fetchProxy(url);
+          const d    = JSON.parse(text);
+          const meta = d?.chart?.result?.[0]?.meta;
+          const vl   = meta?.regularMarketPrice;
+          const ts   = meta?.regularMarketTime;
+          if (vl && vl > 0) {
+            const fecha = ts ? new Date(ts*1000).toISOString().slice(0,10) : today;
+            const mes   = fecha.slice(0,7);
+            vlSet(isin, mes, vl, 'yahoo');
+            ok++;
+            if (dbg) dbg.innerHTML += `<div style="color:var(--green)">✓ ${(ISIN_NAMES[isin]||isin).slice(0,25)}: ${vl} € (${fecha}) [${sym}]</div>`;
+            found = true;
+            break;
+          }
+        } catch(e2) { /* try next symbol */ }
+        await new Promise(r => setTimeout(r, 300));
+      }
+      if (!found) {
         fail++;
-        if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${symbol}: sin precio</div>`;
+        if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${isin}: sin símbolo en Yahoo</div>`;
       }
     } catch(e) {
       fail++;
-      if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${symbol}: ${e.message.slice(0,40)}</div>`;
+      if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${isin}: ${e.message.slice(0,40)}</div>`;
     }
     await new Promise(r => setTimeout(r, 600));
   }
@@ -5021,28 +5042,42 @@ async function cargarHistoricoYahoo(rango) {
     if (btn) btn.textContent = `⏳ ${i+1}/${isins.length}`;
 
     try {
-      const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=${rango}`;
-      const text = await fetchProxy(url);
-      const d    = JSON.parse(text);
-      const result = d?.chart?.result?.[0];
-      if (!result) throw new Error('sin datos');
-
-      const timestamps = result.timestamp || [];
-      const closes = result.indicators?.quote?.[0]?.close || [];
-      let added = 0;
-      for (let j = 0; j < timestamps.length; j++) {
-        const vl = closes[j];
-        if (!vl || vl <= 0) continue;
-        const dia = new Date(timestamps[j]*1000).toISOString().slice(0,10);
-        vlSet(isin, dia, vl, 'yahoo');
-        added++;
+      const symbols = Array.isArray(YAHOO_SYMBOLS[isin]) ? YAHOO_SYMBOLS[isin] : [YAHOO_SYMBOLS[isin]];
+      let found = false;
+      for (const sym of symbols) {
+        try {
+          const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=${rango}`;
+          const text = await fetchProxy(url);
+          const d    = JSON.parse(text);
+          const result = d?.chart?.result?.[0];
+          if (!result) continue;
+          const timestamps = result.timestamp || [];
+          const closes = result.indicators?.quote?.[0]?.close || [];
+          let added = 0;
+          for (let j = 0; j < timestamps.length; j++) {
+            const vl = closes[j];
+            if (!vl || vl <= 0) continue;
+            const dia = new Date(timestamps[j]*1000).toISOString().slice(0,10);
+            vlSet(isin, dia, vl, 'yahoo');
+            added++;
+          }
+          if (added > 0) {
+            dias_ok += added;
+            ok++;
+            if (dbg) dbg.innerHTML += `<div style="color:var(--green)">✓ ${(ISIN_NAMES[isin]||isin).slice(0,25)}: ${added} días [${sym}]</div>`;
+            found = true;
+            break;
+          }
+        } catch(e2) { /* try next */ }
+        await new Promise(r => setTimeout(r, 300));
       }
-      dias_ok += added;
-      ok++;
-      if (dbg) dbg.innerHTML += `<div style="color:var(--green)">✓ ${(ISIN_NAMES[isin]||isin).slice(0,25)}: ${added} días</div>`;
+      if (!found) {
+        fail++;
+        if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${isin}: sin datos históricos en Yahoo</div>`;
+      }
     } catch(e) {
       fail++;
-      if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${symbol}: ${e.message.slice(0,40)}</div>`;
+      if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${isin}: ${e.message.slice(0,40)}</div>`;
     }
     await new Promise(r => setTimeout(r, 600));
   }
@@ -5051,6 +5086,233 @@ async function cargarHistoricoYahoo(rango) {
   if (btn)  { btn.disabled = false; btn.textContent = '📅 Histórico Yahoo'; }
   if (prog) prog.innerHTML = `<div style="color:var(--green);font-size:11px">✓ ${ok} fondos · ${dias_ok} registros diarios${fail>0?' · '+fail+' sin datos':''}</div>`;
   if (document.getElementById('ctab-vl')?.classList.contains('active')) renderVLTabla();
+}
+
+
+// ════════════════════════════════════════════════════════
+//  SISTEMA DE FONDOS — localStorage 'fintrack_fondos'
+//  Fuente de verdad para metadatos de fondos
+//  Estructura: { ISIN: { nombre, gestora, tipo, geo, ter, indice, yahoo, desc } }
+// ════════════════════════════════════════════════════════
+
+// Default fund catalog from hardcoded data
+const FONDOS_DEFAULT = {
+  'IE00BYX5NX33': { nombre:'Fidelity MSCI World Index Fund EUR P Acc', gestora:'Fidelity', tipo:'fondo_indexado', geo:'Global', ter:0.12, indice:'MSCI World', yahoo:'IE00BYX5NX33.SG', desc:'' },
+  'IE0031786696':  { nombre:'Vanguard Emerging Markets Stock Index Fund EUR Acc', gestora:'Vanguard', tipo:'fondo_indexado', geo:'Emergentes', ter:0.23, indice:'FTSE Emerging Markets', yahoo:'IE0031786696.IR', desc:'' },
+  'IE00BYX5MD61': { nombre:'Fidelity MSCI Europe Index Fund EUR P Acc', gestora:'Fidelity', tipo:'fondo_indexado', geo:'Europa', ter:0.12, indice:'MSCI Europe', yahoo:'IE00BYX5MD61.SG', desc:'' },
+  'IE00BYX5MX67': { nombre:'Fidelity S&P 500 Index Fund EUR P Acc', gestora:'Fidelity', tipo:'fondo_indexado', geo:'Norteamérica', ter:0.10, indice:'S&P 500', yahoo:'IE00BYX5MX67.SG', desc:'' },
+  'IE00BL1GVT98': { nombre:'Neuberger Berman Short Duration Euro Bond Fund', gestora:'Neuberger Berman', tipo:'fondo_rf', geo:'Europa', ter:0.35, indice:'', yahoo:'IE00BL1GVT98.SG', desc:'' },
+  'LU1598719752': { nombre:'Cobas Internacional Fund P Acc', gestora:'Cobas AM', tipo:'fondo_activo', geo:'Global', ter:1.50, indice:'', yahoo:'0P00019W2R.F', desc:'' },
+  'LU1694789451': { nombre:'DNCA Invest Alpha Bonds', gestora:'DNCA Finance', tipo:'fondo_rf', geo:'Europa', ter:0.60, indice:'', yahoo:'LU1694789451.F', desc:'' },
+  'LU2145461757': { nombre:'Robeco Smart Energy', gestora:'Robeco', tipo:'fondo_sectorial', geo:'Global', ter:0.90, indice:'', yahoo:'LU2145461757.F', desc:'' },
+  'ES0165243025': { nombre:'Myinvestor Value FI', gestora:'MyInvestor', tipo:'fondo_activo', geo:'Global', ter:0.99, indice:'', yahoo:'ES0165243025.MC', desc:'' },
+  'FR0000989626': { nombre:'Groupama Trésorerie IC', gestora:'Groupama AM', tipo:'fondo_monetario', geo:'Europa', ter:0.10, indice:'ESTER', yahoo:'0P00000LRT.F', desc:'' },
+  'LU0625737910': { nombre:'Pictet-China Index P EUR', gestora:'Pictet AM', tipo:'fondo_indexado', geo:'China', ter:0.45, indice:'MSCI China', yahoo:'0P0000TOUY.F', desc:'' },
+  'LU0301637293': { nombre:'JPMorgan Funds - Korea Equity Fund', gestora:'JPMorgan AM', tipo:'fondo_activo', geo:'Corea', ter:1.50, indice:'MSCI Korea', yahoo:'LU0301637293.F', desc:'' },
+  'ES0146309002': { nombre:'Horos Value Internacional FI', gestora:'Horos AM', tipo:'fondo_activo', geo:'Global', ter:1.20, indice:'', yahoo:'ES0146309002.MC', desc:'' },
+  'ES0140072028': { nombre:'Ábaco Renta Fija Mixta Global C FI', gestora:'Ábaco Capital', tipo:'fondo_mixto', geo:'Global', ter:0.80, indice:'', yahoo:'ES0140072028.MC', desc:'' },
+  'ES0109260531': { nombre:'Amper S.A.', gestora:'', tipo:'accion', geo:'España', ter:0, indice:'', yahoo:'AMP.MC', desc:'' },
+  'ES0143416115': { nombre:'NEXTIL Group S.A.', gestora:'', tipo:'accion', geo:'España', ter:0, indice:'', yahoo:'NXT.MC', desc:'' },
+  'JE00BN574F90':  { nombre:'Wizz Air Holdings', gestora:'', tipo:'accion', geo:'Europa', ter:0, indice:'', yahoo:'WIZZ.L', desc:'' },
+  'LIQUIDEZ_MYINVESTOR': { nombre:'Liquidez MyInvestor', gestora:'MyInvestor', tipo:'liquidez', geo:'España', ter:0, indice:'', yahoo:'', desc:'' },
+};
+
+function fondosGetAll() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('fintrack_fondos') || '{}');
+    // Merge: stored overrides defaults, but defaults fill gaps
+    const merged = { ...FONDOS_DEFAULT };
+    Object.entries(stored).forEach(([isin, data]) => { merged[isin] = { ...merged[isin], ...data }; });
+    return merged;
+  } catch(e) { return { ...FONDOS_DEFAULT }; }
+}
+
+function fondosGet(isin) {
+  return fondosGetAll()[isin] || null;
+}
+
+function fondosSet(isin, data) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('fintrack_fondos') || '{}');
+    stored[isin] = { ...(stored[isin] || {}), ...data };
+    localStorage.setItem('fintrack_fondos', JSON.stringify(stored));
+    fondosRebuildCaches();
+  } catch(e) {}
+}
+
+function fondosDelete(isin) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('fintrack_fondos') || '{}');
+    delete stored[isin];
+    localStorage.setItem('fintrack_fondos', JSON.stringify(stored));
+    fondosRebuildCaches();
+  } catch(e) {}
+}
+
+// Rebuild derived caches used throughout the app
+function fondosRebuildCaches() {
+  const all = fondosGetAll();
+  // Clear and repopulate all metadata caches
+  Object.keys(ISIN_NAMES).forEach(k => delete ISIN_NAMES[k]);
+  Object.keys(ISIN_GEO).forEach(k => delete ISIN_GEO[k]);
+  Object.keys(ISIN_TIPO).forEach(k => delete ISIN_TIPO[k]);
+
+  Object.entries(all).forEach(([isin, f]) => {
+    if (f.nombre) ISIN_NAMES[isin] = f.nombre;
+    if (f.geo)    ISIN_GEO[isin]   = f.geo;
+    if (f.tipo)   ISIN_TIPO[isin]  = f.tipo;
+    // Update YAHOO_SYMBOLS with latest symbol from fondos
+    if (f.yahoo && typeof YAHOO_SYMBOLS !== 'undefined') {
+      const existing = YAHOO_SYMBOLS[isin];
+      // Keep fallback array but put the fondos symbol first
+      if (Array.isArray(existing)) {
+        if (!existing.includes(f.yahoo)) existing.unshift(f.yahoo);
+        else { existing.splice(existing.indexOf(f.yahoo), 1); existing.unshift(f.yahoo); }
+      } else {
+        YAHOO_SYMBOLS[isin] = [f.yahoo];
+      }
+    }
+    // Update REGIONAL_WEIGHTS if regional data provided
+    if (f.regional && typeof REGIONAL_WEIGHTS !== 'undefined') {
+      REGIONAL_WEIGHTS[isin] = f.regional;
+    }
+  });
+  console.log('Fondos caches rebuilt:', Object.keys(ISIN_NAMES).length, 'fondos');
+}
+
+// ── Render tabla fondos ───────────────────────────────────────────────────
+function renderFondosTabla() {
+  fondosRebuildCaches();
+  const all = fondosGetAll();
+  const tbody = document.getElementById('fondos-tbody');
+  if (!tbody) return;
+
+  const tipoLabel = {
+    'fondo_indexado':'F. Indexado','fondo_activo':'F. Gestión Activa','fondo_rf':'F. Renta Fija',
+    'fondo_mixto':'F. Mixto','fondo_monetario':'F. Monetario','fondo_sectorial':'F. Sectorial',
+    'accion':'Acción','liquidez':'Liquidez'
+  };
+  const tipoBadge = {
+    'fondo_indexado':'badge-blue','fondo_activo':'badge-purple','fondo_rf':'badge-green',
+    'fondo_mixto':'badge-amber','fondo_monetario':'badge-green','fondo_sectorial':'badge-amber',
+    'accion':'badge-amber','liquidez':'badge-blue'
+  };
+
+  // Check which ISINs have positions
+  const conPosicion = new Set(activos.filter(a=>!a.cerrado).map(a=>a.isin));
+
+  tbody.innerHTML = Object.entries(all)
+    .filter(([isin]) => isin !== 'LIQUIDEZ_MYINVESTOR')
+    .sort((a,b) => {
+      // Active positions first, then alphabetical
+      const aA = conPosicion.has(a[0]) ? 0 : 1;
+      const bA = conPosicion.has(b[0]) ? 0 : 1;
+      if (aA !== bA) return aA - bA;
+      return (a[1].nombre||'').localeCompare(b[1].nombre||'');
+    })
+    .map(([isin, f]) => {
+      const enCartera = conPosicion.has(isin);
+      return `<tr style="${enCartera ? '' : 'opacity:0.5'}">
+        <td>
+          <div style="font-size:11px;font-weight:500;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.nombre||isin}</div>
+          ${f.gestora ? `<div style="font-size:9px;color:var(--text3)">${f.gestora}</div>` : ''}
+          ${f.desc ? `<div style="font-size:9px;color:var(--text3);font-style:italic;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${f.desc}">${f.desc.slice(0,40)}...</div>` : ''}
+        </td>
+        <td><span class="fund-isin">${isin}</span></td>
+        <td><span class="badge ${tipoBadge[f.tipo]||'badge-blue'}" style="font-size:9px">${tipoLabel[f.tipo]||f.tipo||'—'}</span></td>
+        <td><span class="tag" style="font-size:9px">${f.geo||'—'}</span></td>
+        <td style="text-align:right;font-family:var(--mono);font-size:11px">${f.ter ? f.ter+'%' : '—'}</td>
+        <td style="font-size:10px;color:var(--text2)">${f.indice||'—'}</td>
+        <td style="font-family:var(--mono);font-size:10px;color:var(--text3)">${f.yahoo||'—'}</td>
+        <td style="font-size:10px;color:var(--text2)">${f.gestora||'—'}</td>
+        <td style="text-align:center">
+          <button class="btn btn-ghost" style="padding:2px 8px;font-size:10px" onclick="abrirModalFondo('${isin}')">Editar</button>
+        </td>
+      </tr>`;
+    }).join('');
+}
+
+// ── Modal fondo ───────────────────────────────────────────────────────────
+function abrirModalFondo(isin) {
+  const f = isin ? (fondosGetAll()[isin] || {}) : {};
+  document.getElementById('modal-fondo-title').textContent = isin ? 'Editar fondo' : 'Añadir fondo';
+  document.getElementById('fondo-edit-isin-orig').value = isin || '';
+  document.getElementById('fondo-isin').value    = isin || '';
+  document.getElementById('fondo-isin').disabled = !!isin;
+  document.getElementById('fondo-nombre').value  = f.nombre || '';
+  document.getElementById('fondo-gestora').value = f.gestora || '';
+  document.getElementById('fondo-tipo').value    = f.tipo || 'fondo_activo';
+  document.getElementById('fondo-geo').value     = f.geo || 'Global';
+  document.getElementById('fondo-ter').value     = f.ter || '';
+  document.getElementById('fondo-indice').value  = f.indice || '';
+  document.getElementById('fondo-yahoo').value   = Array.isArray(f.yahoo) ? f.yahoo[0] : (f.yahoo || '');
+  document.getElementById('fondo-desc').value    = f.desc || '';
+  const regionalEl = document.getElementById('fondo-regional');
+  if (regionalEl) regionalEl.value = f.regional ? JSON.stringify(f.regional) : '';
+  document.getElementById('btn-eliminar-fondo').style.display = isin ? 'inline-flex' : 'none';
+  openModal('modal-fondo');
+}
+
+function guardarFondo() {
+  const isinOrig = document.getElementById('fondo-edit-isin-orig').value;
+  const isin = isinOrig || document.getElementById('fondo-isin').value.trim().toUpperCase();
+  if (!isin) { alert('El ISIN es obligatorio'); return; }
+  let regional = null;
+  const regionalStr = document.getElementById('fondo-regional')?.value.trim();
+  if (regionalStr) {
+    try { regional = JSON.parse(regionalStr); } catch(e) { alert('Pesos regionales: JSON inválido\nEjemplo: {"Norteamérica":71.5,"Europa":15.8}'); return; }
+  }
+  const data = {
+    nombre:   document.getElementById('fondo-nombre').value.trim(),
+    gestora:  document.getElementById('fondo-gestora').value.trim(),
+    tipo:     document.getElementById('fondo-tipo').value,
+    geo:      document.getElementById('fondo-geo').value,
+    ter:      parseFloat(document.getElementById('fondo-ter').value) || 0,
+    indice:   document.getElementById('fondo-indice').value.trim(),
+    yahoo:    document.getElementById('fondo-yahoo').value.trim(),
+    desc:     document.getElementById('fondo-desc').value.trim(),
+    regional: regional,
+  };
+  fondosSet(isin, data);
+  closeModal('modal-fondo');
+  renderFondosTabla();
+  // Rebuild caches and refresh cartera if open
+  fondosRebuildCaches();
+  if (document.getElementById('page-cartera')?.classList.contains('active')) {
+    renderCarteraTable();
+  }
+}
+
+function eliminarFondo() {
+  const isin = document.getElementById('fondo-edit-isin-orig').value;
+  if (!isin) return;
+  if (!confirm(`¿Eliminar ${isin} del catálogo? Solo se elimina el registro — las operaciones no se borran.`)) return;
+  fondosDelete(isin);
+  closeModal('modal-fondo');
+  renderFondosTabla();
+}
+
+function exportarFondosCSV() {
+  const all = fondosGetAll();
+  const rows = [['ISIN','Nombre','Gestora','Tipo','Zona','TER%','Índice','Yahoo','Descripción']];
+  Object.entries(all).forEach(([isin, f]) => {
+    rows.push([isin, f.nombre, f.gestora, f.tipo, f.geo, f.ter, f.indice, f.yahoo, f.desc].map(v=>v||''));
+  });
+  const csv = rows.map(r => r.join('\t')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'fondos.csv';
+  a.click();
+}
+
+// ── Tab switching for Fondos page ─────────────────────────────────────────
+function switchFondosTab(tab, btn) {
+  document.querySelectorAll('#page-fondos .tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#page-fondos .tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`ftab-${tab}`)?.classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (tab === 'listado') renderFondosTabla();
+  if (tab === 'vl')      renderVLTabla();
 }
 
 function descargarOperaciones() {
@@ -6356,7 +6618,6 @@ function switchCarteraTab(tab, btn) {
   btn.classList.add('active');
   document.getElementById('ctab-'+tab).classList.add('active');
   if (tab === 'comparar')    renderComparador();
-  if (tab === 'vl')          renderVLTabla();
   if (tab === 'ficha')       initFichaSelect();
 }
 
@@ -7553,6 +7814,7 @@ try {
 
 // Precargar API key de Finnhub si ya estaba guardada (no hacer llamada automática al arrancar)
 // El usuario pulsa "Actualizar VL" cuando quiere actualizar
+fondosRebuildCaches(); // inicializar caches desde localStorage
 aplicarVLActuales();  // aplica VL desde localStorage + VL_HISTORICO
 renderDashboardNew();
 
@@ -9207,5 +9469,124 @@ window.addEventListener('resize', () => {
 });
 
 </script>
+
+<!-- ═══════════════ FONDOS ═══════════════ -->
+<div class="page" id="page-fondos" style="padding: var(--sp-4) var(--sp-3)">
+  <div class="ph">
+    <div>
+      <div class="page-title">Fondos</div>
+      <div class="page-sub">Catálogo de fondos · fuente de verdad para metadatos y precios</div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchFondosTab('listado',this)">📋 Listado de fondos</button>
+    <button class="tab-btn" onclick="switchFondosTab('vl',this)">📊 Valores liquidativos</button>
+  </div>
+
+  <!-- TAB: LISTADO -->
+  <div class="tab-content active" id="ftab-listado">
+    <div class="panel">
+      <div class="panel-hdr" style="margin-bottom:12px">
+        <div>
+          <div class="panel-title">Listado de fondos</div>
+          <div class="panel-sub">Edita los metadatos · los cambios se aplican a toda la app</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="exportarFondosCSV()" style="font-size:11px">
+            <svg viewBox="0 0 16 16"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M2 13h12"/></svg>
+            Exportar CSV
+          </button>
+          <button class="btn btn-primary" onclick="abrirModalFondo(null)" style="font-size:11px">
+            <svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12"/></svg>
+            Añadir fondo
+          </button>
+        </div>
+      </div>
+      <div class="tbl-wrap" style="max-height:calc(100vh - 230px)">
+        <table>
+          <thead>
+            <tr id="fondos-thead">
+              <th>Nombre</th>
+              <th>ISIN</th>
+              <th>Tipo</th>
+              <th>Zona</th>
+              <th style="text-align:right">TER %</th>
+              <th>Índice ref.</th>
+              <th>Símbolo Yahoo</th>
+              <th>Gestora</th>
+              <th style="text-align:center">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="fondos-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /ftab-listado -->
+
+  <!-- TAB: VALORES LIQUIDATIVOS (moved from Cartera) -->
+  <div class="tab-content" id="ftab-vl">
+  <!-- ══════════════ TAB: VALORES LIQUIDATIVOS ══════════════ -->
+  <div class="tab-content" id="ftab-vl-inner">
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-hdr" style="margin-bottom:14px">
+        <div>
+          <div class="panel-title">Valores Liquidativos</div>
+          <div class="panel-sub">Histórico mensual por fondo · fuente de verdad para precios · editable</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label class="btn btn-ghost" style="cursor:pointer;font-size:11px" title="Importar CSV: Fecha, ISIN, VL">
+            <svg viewBox="0 0 16 16"><path d="M8 12V3M5 6l3-3 3 3"/><path d="M2 13h12"/></svg>
+            Importar CSV
+            <input type="file" accept=".csv,.tsv,.txt" style="display:none" onchange="importarCSVVL(this)">
+          </label>
+          <button class="btn btn-ghost" onclick="exportarCSVVL()" style="font-size:11px">
+            <svg viewBox="0 0 16 16"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M2 13h12"/></svg>
+            Exportar CSV
+          </button>
+          <button class="btn btn-ghost" onclick="testCORS()" style="font-size:11px;color:var(--text3)" title="Test CORS">🧪 Test</button>
+          <button class="btn btn-ghost" id="btn-actualizar-vl" onclick="actualizarVLIronia()" style="font-size:11px" title="Obtener último VL desde ironia.tech">
+            🔄 Actualizar VL
+          </button>
+          <button class="btn btn-ghost" id="btn-historico-yahoo" onclick="mostrarMenuHistorico()" style="font-size:11px" title="Cargar histórico diario desde Yahoo Finance">
+            📅 Histórico Yahoo
+          </button>
+          <button class="btn btn-primary" onclick="abrirModalVL()" style="font-size:11px">
+            <svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12"/></svg>
+            Añadir VL
+          </button>
+        </div>
+      </div>
+      <!-- Filtro fondo -->
+      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+        <select id="vl-filter-fondo" class="filter-input" style="min-width:220px;font-size:11px" onchange="renderVLTabla()">
+          <option value="">Todos los fondos</option>
+        </select>
+        <span id="vl-count" style="font-size:10px;color:var(--text3)"></span>
+      </div>
+      <div id="vl-progress" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 12px;margin-bottom:8px;font-size:11px"></div>
+      <div id="vl-debug" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 12px;margin-bottom:8px;font-size:10px;font-family:var(--mono);max-height:160px;overflow-y:auto;color:var(--text2)"></div>
+      <div class="tbl-wrap" style="max-height:calc(100vh - 320px)">
+        <table>
+          <thead>
+            <tr>
+              <th>Fondo</th>
+              <th>ISIN</th>
+              <th style="text-align:center">Fecha</th>
+              <th style="text-align:right">VL (€)</th>
+              <th style="text-align:center">Fuente</th>
+              <th style="text-align:center">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="vl-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /ctab-vl -->
+  </div><!-- /ftab-vl -->
+
+</div><!-- /page-fondos -->
+
 </body>
 </html>
