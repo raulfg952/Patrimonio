@@ -173,6 +173,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); min-
 .page.active { display: block; animation: pageIn 0.18s ease; }
 #page-diversificacion { padding: var(--sp-4) var(--sp-3); }  /* más ancho: padding lateral reducido */
 #page-cartera         { padding: var(--sp-4) var(--sp-3); }
+#page-fondos          { padding: var(--sp-4) var(--sp-3); }
 #page-fiscal          { padding: var(--sp-4) var(--sp-5); }
 #page-planificacion   { padding: var(--sp-4) var(--sp-5); }  /* más ancho: igual que dashboard visualmente */
 .page-title { font-size: var(--text-lg); font-weight: 600; color: var(--text); letter-spacing: -0.4px; }
@@ -681,7 +682,7 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
   /* Pages: menos padding */
   .page { padding: 18px 24px; }
-  #page-cartera, #page-diversificacion { padding: 16px 18px; }
+  #page-cartera, #page-diversificacion, #page-fondos { padding: 16px 18px; }
   #page-fiscal, #page-planificacion { padding: 18px 24px; }
 
   /* KPIs más compactos */
@@ -5081,7 +5082,7 @@ async function actualizarVLIronia() {
             break;
           }
         } catch(e2) { /* try next symbol */ }
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 800));
       }
       if (!found) {
         fail++;
@@ -5091,7 +5092,7 @@ async function actualizarVLIronia() {
       fail++;
       if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${isin}: ${e.message.slice(0,40)}</div>`;
     }
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise(r => setTimeout(r, 1200));
   }
 
   aplicarVLActuales();
@@ -5152,7 +5153,7 @@ async function cargarHistoricoYahoo(rango) {
             break;
           }
         } catch(e2) { /* try next */ }
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 800));
       }
       if (!found) {
         fail++;
@@ -5162,7 +5163,7 @@ async function cargarHistoricoYahoo(rango) {
       fail++;
       if (dbg) dbg.innerHTML += `<div style="color:var(--amber)">— ${isin}: ${e.message.slice(0,40)}</div>`;
     }
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise(r => setTimeout(r, 1200));
   }
 
   aplicarVLActuales();
@@ -9494,7 +9495,7 @@ window.addEventListener('resize', () => {
 </script>
 
 <!-- ═══════════════ FONDOS ═══════════════ -->
-<div class="page" id="page-fondos" style="padding: var(--sp-4) var(--sp-3)">
+<div class="page" id="page-fondos">
   <div class="ph">
     <div>
       <div class="page-title">Fondos</div>
