@@ -4177,26 +4177,7 @@ const INVESTING_NAME_TO_ISIN = {
 // VL_PRECARGADOS — últimos VL conocidos, usados como semilla para el sistema de VL
 // Ahora el sistema de VL (localStorage) es la fuente de verdad
 // Estos valores se cargan como semilla en vlInitFromCode si no hay datos más recientes
-const VL_PRECARGADOS = {}; // poblado dinámicamente por aplicarVLActuales()
-const VL_PRECARGADOS_SEED = {
-  'IE00BYX5NX33': 13.1140,    // Fidelity MSCI World
-  'IE0031786696':  283.6240,   // Vanguard Emerging
-  'IE00BYX5MX67':  15.1440,   // Fidelity S&P 500 (sin posición)
-  'IE00BYX5MD61':  10.1350,   // Fidelity MSCI Europe
-  'LU0625737910':  134.7300,  // Pictet China
-  'LU0301637293':  29.5400,   // JPMorgan Korea (sin posición)
-  'LU2145461757':  99.1600,   // Robeco Smart Energy
-  'LU1598719752':  175.3900,  // Cobas Internacional
-  'ES0146309002':  214.7390,  // Horos (sin posición)
-  'ES0165243025':  1.2110,    // Myinvestor Value
-  'ES0140072028':  9.1890,    // Ábaco RF Mixta
-  'IE00BL1GVT98':  115.8700,  // Neuberger Berman
-  'LU1694789451':  130.2700,  // DNCA Alpha Bonds
-  'FR0000989626':  44186.5700, // Groupama
-  'ES0109260531':  0.1852,    // Amper (cierre abr 2026)
-  'ES0143416115':  0.882,     // NXT (cierre abr 2026)
-  'LIQUIDEZ_MYINVESTOR': 1,
-};
+const VL_PRECARGADOS = {}; // poblado dinámicamente por aplicarVLActuales() desde localStorage
 
 
 // Participaciones exactas calculadas desde los valores reales de MyInvestor
@@ -4214,35 +4195,31 @@ const LIQUIDEZ_SALDO = (() => {
 })();
 const PARTIC_REALES = { 'LIQUIDEZ_MYINVESTOR': LIQUIDEZ_SALDO };
 
-const VL_ANTERIOR = {
-  // VL de la última operación disponible por fondo (referencia anterior)
-  'IE00BYX5NX33': 13.0001,   // 28/04
-  'IE0031786696':  289.0173,  // 28/04
-  'IE00BYX5MX67':  13.6198,  // 29/03
-  'IE00BYX5MD61':  9.9860,   // 28/04
-  'LU0625737910':  144.9275, // 01/02
-  'LU0301637293':  24.1603,  // 29/03
-  'LU2145461757':  92.0400,  // 14/04
-  'LU1598719752':  174.2618, // 14/04
-  'ES0146309002':  202.5443, // 02/04
-  'ES0165243025':  1.2179,   // 22/04
-  'ES0140072028':  9.3769,   // 20/02
-  'IE00BL1GVT98':  116.0219, // 24/04
-  'LU1694789451':  128.8195, // 29/03
-  'FR0000989626':  44172.7273, // 23/04
-  'ES0109260531':  0.1568,    // Amper cierre mar 2026
-  'ES0143416115':  0.816,     // NXT cierre mar 2026
-};
-const VL_FECHA = '02/05/2026';
+// VL_ANTERIOR — penúltimo VL disponible, calculado dinámicamente desde localStorage
+// Se popula en aplicarVLActuales() después de cargar el sistema de VL
+const VL_ANTERIOR = {};
+// VL_FECHA — fecha del VL más reciente disponible, calculada dinámicamente
+let VL_FECHA = '01/01/2026'; // default, se actualiza en aplicarVLActuales()
 
-// Meses disponibles — derivado automáticamente de VL_HISTORICO + mes actual
-// Actualizar solo VL_HISTORICO y VL_FECHA cada mes, el resto se adapta solo
-const MESES_DISPONIBLES = (() => {
-  const mesActualKey = VL_FECHA.slice(6,10)+'-'+VL_FECHA.slice(3,5);
-  const fromHist = [...new Set(Object.values(VL_HISTORICO).flatMap(v=>Object.keys(v)))].sort();
-  if (!fromHist.includes(mesActualKey)) fromHist.push(mesActualKey);
-  return fromHist;
-})();
+// MESES_DISPONIBLES — recalculado dinámicamente desde localStorage VL
+let MESES_DISPONIBLES = [];
+function recalcMesesDisponibles() {
+  const data = vlGetAll();
+  const allMeses = new Set();
+  Object.values(data).forEach(meses => {
+    Object.keys(meses).forEach(k => {
+      // Only include YYYY-MM format (not daily YYYY-MM-DD)
+      if (/^\d{4}-\d{2}$/.test(k)) allMeses.add(k);
+    });
+  });
+  MESES_DISPONIBLES = [...allMeses].sort();
+  // Update VL_FECHA to latest month
+  if (MESES_DISPONIBLES.length) {
+    const ultimo = MESES_DISPONIBLES[MESES_DISPONIBLES.length-1];
+    const [y,m] = ultimo.split('-');
+    VL_FECHA = `01/${m}/${y}`;
+  }
+}
 
 // Marca qué activos tienen precio real importado (vs estimado = coste)
 const preciosActualizados = {};
@@ -5181,6 +5158,14 @@ function fondosRebuildCaches() {
 }
 
 // ── Render tabla fondos ───────────────────────────────────────────────────
+let _fondosSort = { key: 'nombre', dir: 1 };
+
+function sortFondos(key) {
+  if (_fondosSort.key === key) _fondosSort.dir *= -1;
+  else { _fondosSort.key = key; _fondosSort.dir = 1; }
+  renderFondosTabla();
+}
+
 function renderFondosTabla() {
   fondosRebuildCaches();
   const all = fondosGetAll();
@@ -5204,11 +5189,16 @@ function renderFondosTabla() {
   tbody.innerHTML = Object.entries(all)
     .filter(([isin]) => isin !== 'LIQUIDEZ_MYINVESTOR')
     .sort((a,b) => {
-      // Active positions first, then alphabetical
+      const k = _fondosSort.key;
+      const d = _fondosSort.dir;
+      // Active positions always first
       const aA = conPosicion.has(a[0]) ? 0 : 1;
       const bA = conPosicion.has(b[0]) ? 0 : 1;
       if (aA !== bA) return aA - bA;
-      return (a[1].nombre||'').localeCompare(b[1].nombre||'');
+      const va = k === 'isin' ? a[0] : (k === 'ter' ? (a[1].ter||0) : (a[1][k]||''));
+      const vb = k === 'isin' ? b[0] : (k === 'ter' ? (b[1].ter||0) : (b[1][k]||''));
+      if (typeof va === 'number') return (va - vb) * d;
+      return va.localeCompare(vb) * d;
     })
     .map(([isin, f]) => {
       const enCartera = conPosicion.has(isin);
@@ -9508,14 +9498,14 @@ window.addEventListener('resize', () => {
         <table>
           <thead>
             <tr id="fondos-thead">
-              <th>Nombre</th>
-              <th>ISIN</th>
-              <th>Tipo</th>
-              <th>Zona</th>
-              <th style="text-align:right">TER %</th>
-              <th>Índice ref.</th>
+              <th onclick="sortFondos('nombre')" style="cursor:pointer">Nombre<span class="sort-arrow"></span></th>
+              <th onclick="sortFondos('isin')" style="cursor:pointer">ISIN<span class="sort-arrow"></span></th>
+              <th onclick="sortFondos('tipo')" style="cursor:pointer">Tipo<span class="sort-arrow"></span></th>
+              <th onclick="sortFondos('geo')" style="cursor:pointer">Zona<span class="sort-arrow"></span></th>
+              <th style="text-align:right;cursor:pointer" onclick="sortFondos('ter')">TER %<span class="sort-arrow"></span></th>
+              <th onclick="sortFondos('indice')" style="cursor:pointer">Índice ref.<span class="sort-arrow"></span></th>
               <th>Símbolo Yahoo</th>
-              <th>Gestora</th>
+              <th onclick="sortFondos('gestora')" style="cursor:pointer">Gestora<span class="sort-arrow"></span></th>
               <th style="text-align:center">Acciones</th>
             </tr>
           </thead>
@@ -9525,10 +9515,8 @@ window.addEventListener('resize', () => {
     </div>
   </div><!-- /ftab-listado -->
 
-  <!-- TAB: VALORES LIQUIDATIVOS (moved from Cartera) -->
+  <!-- TAB: VALORES LIQUIDATIVOS -->
   <div class="tab-content" id="ftab-vl">
-  <!-- ══════════════ TAB: VALORES LIQUIDATIVOS ══════════════ -->
-  <div class="tab-content" id="ftab-vl-inner">
     <div class="panel" style="margin-bottom:14px">
       <div class="panel-hdr" style="margin-bottom:14px">
         <div>
@@ -9583,7 +9571,6 @@ window.addEventListener('resize', () => {
         </table>
       </div>
     </div>
-  </div><!-- /ctab-vl -->
   </div><!-- /ftab-vl -->
 
 </div><!-- /page-fondos -->
