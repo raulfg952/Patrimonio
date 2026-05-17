@@ -1619,7 +1619,7 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
 
 
-</div><!-- /page-cartera -->>
+</div><!-- /page-cartera -->
 
 
 <!-- ═══════════════ ANÁLISIS ═══════════════ -->
@@ -2702,6 +2702,77 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 </div>
 
 <script>
+function getFondosDefault() {
+  // Lazy accessor so FONDOS_DEFAULT doesn't need to be declared before this function
+  return typeof FONDOS_DEFAULT !== 'undefined' ? FONDOS_DEFAULT : {};
+}
+
+function fondosGetAll() {
+  try {
+    const defaults = getFondosDefault();
+    const stored = JSON.parse(localStorage.getItem('fintrack_fondos') || '{}');
+    const merged = { ...defaults };
+    Object.entries(stored).forEach(([isin, data]) => { merged[isin] = { ...merged[isin], ...data }; });
+    return merged;
+  } catch(e) { return getFondosDefault(); }
+}
+
+function fondosGet(isin) {
+  return fondosGetAll()[isin] || null;
+}
+
+function fondosSet(isin, data) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('fintrack_fondos') || '{}');
+    stored[isin] = { ...(stored[isin] || {}), ...data };
+    localStorage.setItem('fintrack_fondos', JSON.stringify(stored));
+    fondosRebuildCaches();
+  } catch(e) {}
+}
+
+function fondosDelete(isin) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('fintrack_fondos') || '{}');
+    delete stored[isin];
+    localStorage.setItem('fintrack_fondos', JSON.stringify(stored));
+    fondosRebuildCaches();
+  } catch(e) {}
+}
+
+// Rebuild derived caches used throughout the app
+function fondosRebuildCaches() {
+  const all = fondosGetAll();
+  // Clear and repopulate all metadata caches
+  Object.keys(ISIN_NAMES).forEach(k => delete ISIN_NAMES[k]);
+  Object.keys(ISIN_GEO).forEach(k => delete ISIN_GEO[k]);
+  Object.keys(ISIN_TIPO).forEach(k => delete ISIN_TIPO[k]);
+
+  Object.entries(all).forEach(([isin, f]) => {
+    if (f.nombre) ISIN_NAMES[isin] = f.nombre;
+    if (f.geo)    ISIN_GEO[isin]   = f.geo;
+    if (f.tipo)   ISIN_TIPO[isin]  = f.tipo;
+    // Update YAHOO_SYMBOLS with latest symbol from fondos
+    if (f.yahoo && typeof YAHOO_SYMBOLS !== 'undefined') {
+      const existing = YAHOO_SYMBOLS[isin];
+      // Keep fallback array but put the fondos symbol first
+      if (Array.isArray(existing)) {
+        if (!existing.includes(f.yahoo)) existing.unshift(f.yahoo);
+        else { existing.splice(existing.indexOf(f.yahoo), 1); existing.unshift(f.yahoo); }
+      } else {
+        YAHOO_SYMBOLS[isin] = [f.yahoo];
+      }
+    }
+    // Update REGIONAL_WEIGHTS if regional data provided
+    if (f.regional && typeof REGIONAL_WEIGHTS !== 'undefined') {
+      REGIONAL_WEIGHTS[isin] = f.regional;
+    }
+  });
+  console.log('Fondos caches rebuilt:', Object.keys(ISIN_NAMES).length, 'fondos');
+}
+
+
+
+
 // ════════════════════════════════════════════════════════
 //  MAESTRO DE FONDOS — fuente: hoja "Fondos" del Excel
 //  Nombres y clasificaciones corregidos 10/04/2026
@@ -2987,6 +3058,27 @@ const COSTE_FIFO = {};
     COSTE_FIFO[isin] = calcCosteFIFO(isin);
   });
 })();
+
+const FONDOS_DEFAULT = {
+  'IE00BYX5NX33': { nombre:'Fidelity MSCI World Index Fund EUR P Acc', gestora:'Fidelity', tipo:'fondo_indexado', geo:'Global', ter:0.12, indice:'MSCI World', yahoo:'0P0001CLDK.F', desc:'' },
+  'IE0031786696':  { nombre:'Vanguard Emerging Markets Stock Index Fund EUR Acc', gestora:'Vanguard', tipo:'fondo_indexado', geo:'Emergentes', ter:0.23, indice:'FTSE Emerging Markets', yahoo:'0P00012I6A.F', desc:'' },
+  'IE00BYX5MD61': { nombre:'Fidelity MSCI Europe Index Fund EUR P Acc', gestora:'Fidelity', tipo:'fondo_indexado', geo:'Europa', ter:0.12, indice:'MSCI Europe', yahoo:'0P0001CJGN.F', desc:'' },
+  'IE00BYX5MX67': { nombre:'Fidelity S&P 500 Index Fund EUR P Acc', gestora:'Fidelity', tipo:'fondo_indexado', geo:'Norteamérica', ter:0.10, indice:'S&P 500', yahoo:'IE00BYX5MX67.SG', desc:'' },
+  'IE00BL1GVT98': { nombre:'Neuberger Berman Short Duration Euro Bond Fund', gestora:'Neuberger Berman', tipo:'fondo_rf', geo:'Europa', ter:0.35, indice:'', yahoo:'0P0001FAME.F', desc:'' },
+  'LU1598719752': { nombre:'Cobas Internacional Fund P Acc', gestora:'Cobas AM', tipo:'fondo_activo', geo:'Global', ter:1.50, indice:'', yahoo:'0P00019W2R.F', desc:'' },
+  'LU1694789451': { nombre:'DNCA Invest Alpha Bonds', gestora:'DNCA Finance', tipo:'fondo_rf', geo:'Europa', ter:0.60, indice:'', yahoo:'0P0001CH1D.F', desc:'' },
+  'LU2145461757': { nombre:'Robeco Smart Energy', gestora:'Robeco', tipo:'fondo_sectorial', geo:'Global', ter:0.90, indice:'', yahoo:'0P0001KWJF.F', desc:'' },
+  'ES0165243025': { nombre:'Myinvestor Value FI', gestora:'MyInvestor', tipo:'fondo_activo', geo:'Global', ter:0.99, indice:'', yahoo:'0P0001DFE7.F', desc:'' },
+  'FR0000989626': { nombre:'Groupama Trésorerie IC', gestora:'Groupama AM', tipo:'fondo_monetario', geo:'Europa', ter:0.10, indice:'ESTER', yahoo:'0P00000LRT.F', desc:'' },
+  'LU0625737910': { nombre:'Pictet-China Index P EUR', gestora:'Pictet AM', tipo:'fondo_indexado', geo:'China', ter:0.45, indice:'MSCI China', yahoo:'0P0000TOUY.F', desc:'' },
+  'LU0301637293': { nombre:'JPMorgan Funds - Korea Equity Fund', gestora:'JPMorgan AM', tipo:'fondo_activo', geo:'Corea', ter:1.50, indice:'MSCI Korea', yahoo:'0P0000YQEP.F', desc:'' },
+  'ES0146309002': { nombre:'Horos Value Internacional FI', gestora:'Horos AM', tipo:'fondo_activo', geo:'Global', ter:1.20, indice:'', yahoo:'0P0001DFE8.F', desc:'' },
+  'ES0140072028': { nombre:'Ábaco Renta Fija Mixta Global C FI', gestora:'Ábaco Capital', tipo:'fondo_mixto', geo:'Global', ter:0.80, indice:'', yahoo:'ES0140072028.MC', desc:'' },
+  'ES0109260531': { nombre:'Amper S.A.', gestora:'', tipo:'accion', geo:'España', ter:0, indice:'', yahoo:'AMP.MC', desc:'' },
+  'ES0143416115': { nombre:'NEXTIL Group S.A.', gestora:'', tipo:'accion', geo:'España', ter:0, indice:'', yahoo:'NXT.MC', desc:'' },
+  'JE00BN574F90':  { nombre:'Wizz Air Holdings', gestora:'', tipo:'accion', geo:'Europa', ter:0, indice:'', yahoo:'WIZZ.L', desc:'' },
+  'LIQUIDEZ_MYINVESTOR': { nombre:'Liquidez MyInvestor', gestora:'MyInvestor', tipo:'liquidez', geo:'España', ter:0, indice:'', yahoo:'', desc:'' },
+};
 
 let activos = Object.values(portfolio).map(p => {
   const partic_neta = +(p.partic_in - p.partic_out).toFixed(3);
@@ -3540,22 +3632,21 @@ function calcValorCarteraMes(hastaM) {
     else             { po[isin] = (po[isin]||0) + partic; }
   });
 
-  // Para el mes actual (último con datos) usar PARTIC_REALES y VL_PRECARGADOS
-  // Extraer mes del VL_FECHA dinámicamente: "dd/mm/yyyy" → "yyyy-mm"
-  const mesActual = VL_FECHA.slice(6,10)+'-'+VL_FECHA.slice(3,5);
-  if (hastaM >= mesActual) {
-    // Usar datos reales de MyInvestor (sin LIQUIDEZ_MYINVESTOR)
-    return Object.entries(PARTIC_REALES)
-      .filter(([isin]) => isin !== 'LIQUIDEZ_MYINVESTOR')
-      .reduce((s,[isin,partic]) => s + (VL_PRECARGADOS[isin]||0)*partic, 0);
-  }
-
-  // Para meses históricos: VL_HISTORICO del mes o VL_ACTUAL como fallback
+  // Para todos los meses: calcular con VL histórico del mes o el más reciente disponible
   let valor = 0;
   Object.keys(pi).forEach(isin => {
     const neta = (pi[isin]||0) - (po[isin]||0);
     if (neta <= 0.001) return;
-    const vl = (VL_HISTORICO[isin]||{})[hastaM] || VL_PRECARGADOS[isin] || 0;
+    // Try exact month first, then search backwards for nearest available VL
+    const hist = vlGetHistorico(isin) || {};
+    let vl = hist[hastaM];
+    if (!vl) {
+      // Find most recent VL at or before hastaM
+      const meses = Object.keys(hist).filter(m => m <= hastaM).sort();
+      if (meses.length) vl = hist[meses[meses.length-1]];
+    }
+    // Fallback to current price
+    if (!vl) vl = VL_PRECARGADOS[isin] || (activos.find(a=>a.isin===isin)?.precio) || 0;
     valor += vl * neta;
   });
   return valor;
@@ -3610,10 +3701,20 @@ function renderDbEvo() {
   const serieInversiones  = [];  // valor fondos (todos, incl. Groupama)
   const serieAportado     = [];  // compras - reembolsos acumulado
 
+  // Debug: check VL_HISTORICO state
+  const vlHisKeys = Object.keys(VL_HISTORICO);
+  console.log('renderDbEvo: months=', months, 'VL_HISTORICO fondos=', vlHisKeys.length);
+  if (vlHisKeys.length === 0) {
+    // VL_HISTORICO not yet populated - reinit
+    vlInitFromCode();
+    console.log('renderDbEvo: re-init VL_HISTORICO, now=', Object.keys(VL_HISTORICO).length);
+  }
+
   months.forEach(mes => {
     const valFondos    = calcValorCarteraMes(mes);
     const liqCuenta    = calcLiquidezCuentaMes(mes);
     const aportado     = calcAportadoMes(mes);
+    console.log('mes', mes, 'fondos=', valFondos.toFixed(0), 'liq=', liqCuenta.toFixed(0));
     serieInversiones.push(+valFondos.toFixed(2));
     seriePatrimonio.push(+(valFondos + liqCuenta + obTotal).toFixed(2));
     serieAportado.push(+aportado.toFixed(2));
@@ -4516,6 +4617,12 @@ function vlSet(isin, mes, valor, fuente) {
   if (!data[isin]) data[isin] = {};
   data[isin][mes] = { v: +valor, f: fuente || 'manual' };
   vlSaveAll(data);
+  // Keep in-memory VL_HISTORICO in sync (monthly keys YYYY-MM only)
+  if (/^\d{4}-\d{2}$/.test(mes)) {
+    if (!VL_HISTORICO[isin]) VL_HISTORICO[isin] = {};
+    VL_HISTORICO[isin][mes] = +valor;
+    VL_PRECARGADOS[isin] = +valor;
+  }
 }
 
 function vlDelete(isin, mes) {
@@ -4548,21 +4655,8 @@ function vlGetLatest(isin) {
 }
 
 function vlGetHistorico(isin) {
-  // Devuelve objeto { 'YYYY-MM': vl } merged de código + localStorage
-  const data = vlGetAll();
-  const merged = {};
-  if (VL_HISTORICO[isin]) {
-    Object.entries(VL_HISTORICO[isin]).forEach(([mes, v]) => {
-      merged[mes] = v;
-    });
-  }
-  const local = data[isin];
-  if (local) {
-    Object.entries(local).forEach(([mes, entry]) => {
-      merged[mes] = entry.v ?? entry;
-    });
-  }
-  return merged;
+  // Devuelve objeto { 'YYYY-MM': vl } — fuente única: VL_HISTORICO (sincronizado con localStorage)
+  return VL_HISTORICO[isin] || {};
 }
 
 // Inicializar localStorage desde VL_HISTORICO si está vacío
@@ -4602,20 +4696,30 @@ function vlInitFromCode() {
       changed = true;
     }
   });
-  // Also seed from VL_PRECARGADOS_SEED for months not yet in VL_HISTORICO_SEED
-  // Use current month as key for precargados
-  const seedMes = new Date().toISOString().slice(0,7);
-  Object.entries(VL_PRECARGADOS_SEED).forEach(([isin, vl]) => {
-    if (!data[isin]) data[isin] = {};
-    // Only add if no more recent data exists for this month
-    if (!data[isin][seedMes]) {
-      data[isin][seedMes] = { v: vl, f: 'fin_de_mes' };
-      changed = true;
-    }
-  });
+  // VL_PRECARGADOS_SEED removed — seeding now comes from VL_HISTORICO_SEED and operations only
 
   if (changed) vlSaveAll(data);
-  console.log('VL inicializados:', Object.keys(data).length, 'fondos');
+
+  // Populate VL_HISTORICO in-memory from localStorage (monthly keys only YYYY-MM)
+  // This ensures all chart code that reads VL_HISTORICO directly still works
+  Object.entries(data).forEach(([isin, meses]) => {
+    const monthly = {};
+    Object.entries(meses).forEach(([k, entry]) => {
+      if (/^\d{4}-\d{2}$/.test(k)) { // only YYYY-MM keys
+        monthly[k] = entry.v ?? entry;
+      }
+    });
+    if (Object.keys(monthly).length) VL_HISTORICO[isin] = monthly;
+  });
+
+  // Also populate VL_PRECARGADOS with latest VL per fund
+  Object.entries(VL_HISTORICO).forEach(([isin, meses]) => {
+    const keys = Object.keys(meses).sort();
+    if (keys.length) VL_PRECARGADOS[isin] = meses[keys[keys.length-1]];
+  });
+
+  console.log('VL inicializados:', Object.keys(VL_HISTORICO).length, 'fondos');
+  recalcMesesDisponibles();
 }
 
 // ── Render tabla VL ───────────────────────────────────────────────────────
@@ -4807,6 +4911,7 @@ function aplicarVLActuales() {
       preciosActualizados[a.isin] = true;
     }
   });
+  recalcMesesDisponibles();
 }
 
 // ── Importar CSV de VL ────────────────────────────────────────────────────
@@ -4898,24 +5003,25 @@ const IRONIA_URLS = {
 
 // Mapa ISIN → símbolo Yahoo Finance
 // Símbolos Yahoo Finance — arrays para intentar en orden hasta encontrar precio
+// Códigos 0P000XXXXX.F son códigos Morningstar usados por Yahoo para fondos europeos
 const YAHOO_SYMBOLS = {
-  'IE00BYX5NX33': ['IE00BYX5NX33.SG', 'IE00BYX5NX33.IR', 'IE00BYX5NX33.F'],
-  'IE0031786696':  ['IE0031786696.IR',  'IE0031786696.SG',  '0P00012I6A.F'],
-  'IE00BYX5MD61': ['IE00BYX5MD61.SG',  'IE00BYX5MD61.IR',  'IE00BYX5MD61.F'],
-  'IE00BYX5MX67': ['IE00BYX5MX67.SG',  'IE00BYX5MX67.IR',  'IE00BYX5MX67.F'],
-  'IE00BL1GVT98': ['IE00BL1GVT98.SG',  'IE00BL1GVT98.IR',  'IE00BL1GVT98.F'],
-  'LU1598719752': ['0P00019W2R.F',      'LU1598719752.SG',  'LU1598719752.F'],
-  'LU1694789451': ['LU1694789451.F',    'LU1694789451.SG'],
-  'LU2145461757': ['LU2145461757.F',    'LU2145461757.SG'],
-  'ES0165243025': ['ES0165243025.MC',   'ES0165243025.SG'],
-  'FR0000989626': ['0P00000LRT.F',      'FR0000989626.PA',  'FR0000989626.F'],
-  'LU0625737910': ['0P0000TOUY.F',      'LU0625737910.SG',  'LU0625737910.F'],
-  'LU0301637293': ['LU0301637293.F',    'LU0301637293.SG'],
-  'ES0146309002': ['ES0146309002.MC',   'ES0146309002.SG'],
-  'ES0140072028': ['ES0140072028.MC',   'ES0140072028.SG'],
-  'ES0109260531': ['AMP.MC'],
-  'ES0143416115': ['NXT.MC'],
-  'JE00BN574F90':  ['WIZZ.L',           'WZZ.L'],
+  'IE00BYX5NX33': ['0P0001CLDK.F', 'IE00BYX5NX33.SG', 'IE00BYX5NX33.IR'],   // Fidelity MSCI World
+  'IE0031786696':  ['0P00012I6A.F', 'IE0031786696.IR',  'IE0031786696.SG'],   // Vanguard EM
+  'IE00BYX5MD61': ['0P0001CJGN.F', 'IE00BYX5MD61.SG',  'IE00BYX5MD61.IR'],   // Fidelity Europe
+  'IE00BYX5MX67': ['0P0001CLDM.F', 'IE00BYX5MX67.SG',  'IE00BYX5MX67.IR'],   // Fidelity S&P500
+  'IE00BL1GVT98': ['0P0001FAME.F', 'IE00BL1GVT98.SG',  'IE00BL1GVT98.IR'],   // NB Short Duration
+  'LU1598719752': ['0P00019W2R.F', 'LU1598719752.SG'],                         // Cobas Internacional
+  'LU1694789451': ['0P0001CH1D.F', 'LU1694789451.F',    'LU1694789451.SG'],   // DNCA Alpha Bonds
+  'LU2145461757': ['0P0001KWJF.F', 'LU2145461757.F',    'LU2145461757.SG'],   // Robeco Smart Energy
+  'ES0165243025': ['0P0001DFE7.F', 'ES0165243025.MC'],                         // Myinvestor Value
+  'FR0000989626': ['0P00000LRT.F', 'FR0000989626.F'],                          // Groupama
+  'LU0625737910': ['0P0000TOUY.F', 'LU0625737910.SG'],                         // Pictet China
+  'LU0301637293': ['0P0000YQEP.F', 'LU0301637293.F',    'LU0301637293.SG'],   // JPM Korea
+  'ES0146309002': ['0P0001DFE8.F', 'ES0146309002.MC'],                         // Horos
+  'ES0140072028': ['ES0140072028.MC', 'ES0140072028.SG'],                      // Ábaco
+  'ES0109260531': ['AMP.MC'],                                                   // Amper
+  'ES0143416115': ['NXT.MC'],                                                   // NEXTIL
+  'JE00BN574F90':  ['WIZZ.L'],                                                  // Wizz Air
 };
 
 // ── PROXY ────────────────────────────────────────────────────────────────
@@ -5073,89 +5179,8 @@ async function cargarHistoricoYahoo(rango) {
 // ════════════════════════════════════════════════════════
 
 // Default fund catalog from hardcoded data
-const FONDOS_DEFAULT = {
-  'IE00BYX5NX33': { nombre:'Fidelity MSCI World Index Fund EUR P Acc', gestora:'Fidelity', tipo:'fondo_indexado', geo:'Global', ter:0.12, indice:'MSCI World', yahoo:'IE00BYX5NX33.SG', desc:'' },
-  'IE0031786696':  { nombre:'Vanguard Emerging Markets Stock Index Fund EUR Acc', gestora:'Vanguard', tipo:'fondo_indexado', geo:'Emergentes', ter:0.23, indice:'FTSE Emerging Markets', yahoo:'IE0031786696.IR', desc:'' },
-  'IE00BYX5MD61': { nombre:'Fidelity MSCI Europe Index Fund EUR P Acc', gestora:'Fidelity', tipo:'fondo_indexado', geo:'Europa', ter:0.12, indice:'MSCI Europe', yahoo:'IE00BYX5MD61.SG', desc:'' },
-  'IE00BYX5MX67': { nombre:'Fidelity S&P 500 Index Fund EUR P Acc', gestora:'Fidelity', tipo:'fondo_indexado', geo:'Norteamérica', ter:0.10, indice:'S&P 500', yahoo:'IE00BYX5MX67.SG', desc:'' },
-  'IE00BL1GVT98': { nombre:'Neuberger Berman Short Duration Euro Bond Fund', gestora:'Neuberger Berman', tipo:'fondo_rf', geo:'Europa', ter:0.35, indice:'', yahoo:'IE00BL1GVT98.SG', desc:'' },
-  'LU1598719752': { nombre:'Cobas Internacional Fund P Acc', gestora:'Cobas AM', tipo:'fondo_activo', geo:'Global', ter:1.50, indice:'', yahoo:'0P00019W2R.F', desc:'' },
-  'LU1694789451': { nombre:'DNCA Invest Alpha Bonds', gestora:'DNCA Finance', tipo:'fondo_rf', geo:'Europa', ter:0.60, indice:'', yahoo:'LU1694789451.F', desc:'' },
-  'LU2145461757': { nombre:'Robeco Smart Energy', gestora:'Robeco', tipo:'fondo_sectorial', geo:'Global', ter:0.90, indice:'', yahoo:'LU2145461757.F', desc:'' },
-  'ES0165243025': { nombre:'Myinvestor Value FI', gestora:'MyInvestor', tipo:'fondo_activo', geo:'Global', ter:0.99, indice:'', yahoo:'ES0165243025.MC', desc:'' },
-  'FR0000989626': { nombre:'Groupama Trésorerie IC', gestora:'Groupama AM', tipo:'fondo_monetario', geo:'Europa', ter:0.10, indice:'ESTER', yahoo:'0P00000LRT.F', desc:'' },
-  'LU0625737910': { nombre:'Pictet-China Index P EUR', gestora:'Pictet AM', tipo:'fondo_indexado', geo:'China', ter:0.45, indice:'MSCI China', yahoo:'0P0000TOUY.F', desc:'' },
-  'LU0301637293': { nombre:'JPMorgan Funds - Korea Equity Fund', gestora:'JPMorgan AM', tipo:'fondo_activo', geo:'Corea', ter:1.50, indice:'MSCI Korea', yahoo:'LU0301637293.F', desc:'' },
-  'ES0146309002': { nombre:'Horos Value Internacional FI', gestora:'Horos AM', tipo:'fondo_activo', geo:'Global', ter:1.20, indice:'', yahoo:'ES0146309002.MC', desc:'' },
-  'ES0140072028': { nombre:'Ábaco Renta Fija Mixta Global C FI', gestora:'Ábaco Capital', tipo:'fondo_mixto', geo:'Global', ter:0.80, indice:'', yahoo:'ES0140072028.MC', desc:'' },
-  'ES0109260531': { nombre:'Amper S.A.', gestora:'', tipo:'accion', geo:'España', ter:0, indice:'', yahoo:'AMP.MC', desc:'' },
-  'ES0143416115': { nombre:'NEXTIL Group S.A.', gestora:'', tipo:'accion', geo:'España', ter:0, indice:'', yahoo:'NXT.MC', desc:'' },
-  'JE00BN574F90':  { nombre:'Wizz Air Holdings', gestora:'', tipo:'accion', geo:'Europa', ter:0, indice:'', yahoo:'WIZZ.L', desc:'' },
-  'LIQUIDEZ_MYINVESTOR': { nombre:'Liquidez MyInvestor', gestora:'MyInvestor', tipo:'liquidez', geo:'España', ter:0, indice:'', yahoo:'', desc:'' },
-};
 
-function fondosGetAll() {
-  try {
-    const stored = JSON.parse(localStorage.getItem('fintrack_fondos') || '{}');
-    // Merge: stored overrides defaults, but defaults fill gaps
-    const merged = { ...FONDOS_DEFAULT };
-    Object.entries(stored).forEach(([isin, data]) => { merged[isin] = { ...merged[isin], ...data }; });
-    return merged;
-  } catch(e) { return { ...FONDOS_DEFAULT }; }
-}
 
-function fondosGet(isin) {
-  return fondosGetAll()[isin] || null;
-}
-
-function fondosSet(isin, data) {
-  try {
-    const stored = JSON.parse(localStorage.getItem('fintrack_fondos') || '{}');
-    stored[isin] = { ...(stored[isin] || {}), ...data };
-    localStorage.setItem('fintrack_fondos', JSON.stringify(stored));
-    fondosRebuildCaches();
-  } catch(e) {}
-}
-
-function fondosDelete(isin) {
-  try {
-    const stored = JSON.parse(localStorage.getItem('fintrack_fondos') || '{}');
-    delete stored[isin];
-    localStorage.setItem('fintrack_fondos', JSON.stringify(stored));
-    fondosRebuildCaches();
-  } catch(e) {}
-}
-
-// Rebuild derived caches used throughout the app
-function fondosRebuildCaches() {
-  const all = fondosGetAll();
-  // Clear and repopulate all metadata caches
-  Object.keys(ISIN_NAMES).forEach(k => delete ISIN_NAMES[k]);
-  Object.keys(ISIN_GEO).forEach(k => delete ISIN_GEO[k]);
-  Object.keys(ISIN_TIPO).forEach(k => delete ISIN_TIPO[k]);
-
-  Object.entries(all).forEach(([isin, f]) => {
-    if (f.nombre) ISIN_NAMES[isin] = f.nombre;
-    if (f.geo)    ISIN_GEO[isin]   = f.geo;
-    if (f.tipo)   ISIN_TIPO[isin]  = f.tipo;
-    // Update YAHOO_SYMBOLS with latest symbol from fondos
-    if (f.yahoo && typeof YAHOO_SYMBOLS !== 'undefined') {
-      const existing = YAHOO_SYMBOLS[isin];
-      // Keep fallback array but put the fondos symbol first
-      if (Array.isArray(existing)) {
-        if (!existing.includes(f.yahoo)) existing.unshift(f.yahoo);
-        else { existing.splice(existing.indexOf(f.yahoo), 1); existing.unshift(f.yahoo); }
-      } else {
-        YAHOO_SYMBOLS[isin] = [f.yahoo];
-      }
-    }
-    // Update REGIONAL_WEIGHTS if regional data provided
-    if (f.regional && typeof REGIONAL_WEIGHTS !== 'undefined') {
-      REGIONAL_WEIGHTS[isin] = f.regional;
-    }
-  });
-  console.log('Fondos caches rebuilt:', Object.keys(ISIN_NAMES).length, 'fondos');
-}
 
 // ── Render tabla fondos ───────────────────────────────────────────────────
 let _fondosSort = { key: 'nombre', dir: 1 };
@@ -5876,7 +5901,7 @@ function renderDiversificacion() {
     const tipoValMes = {};
     tiposGrupos.forEach(t => tipoValMes[t] = 0);
     activos.forEach(a => {
-      const vlMes = (VL_HISTORICO[a.isin]||{})[mes] || (mes===mesActual?VL_PRECARGADOS[a.isin]:null);
+      const vlMes = (vlGetHistorico(a.isin)||{})[mes] || (mes===mesActual?VL_PRECARGADOS[a.isin]:null);
       if (!vlMes && a.tipo !== 'liquidez') return;
       const partic = a.tipo === 'liquidez' ? a.participaciones : (() => {
         // Approximate participaciones at that month from ops
@@ -6009,7 +6034,7 @@ function renderDiversificacion() {
   const drawdownEl = document.getElementById('div-drawdown');
   if (drawdownEl) {
     const ddItems = posicionesAbiertas()
-      .filter(a => a.tipo !== 'liquidez' && VL_HISTORICO[a.isin])
+      .filter(a => a.tipo !== 'liquidez' && VL_PRECARGADOS[a.isin])
       .map(a => {
         const vlsHist  = Object.values(VL_HISTORICO[a.isin]);
         const vlActual = VL_PRECARGADOS[a.isin] || a.precio;
@@ -6896,7 +6921,7 @@ function renderSparklines() {
     .filter(a => a.tipo !== 'liquidez' && a.participaciones > 0)
     .map(a => {
       const vlSeries = meses.map(m => {
-        return (VL_HISTORICO[a.isin]||{})[m]
+        return (vlGetHistorico(a.isin)||{})[m]
           || (m === mesActual ? VL_PRECARGADOS[a.isin] : null);
       });
       const puntos = vlSeries.filter(v => v !== null && v !== undefined);
@@ -7065,7 +7090,7 @@ function renderDiasCartera() {
 //  C2: MOMENTO DE COMPRA EN EL RANGO
 // ════════════════════════════════════════════════════════
 function calcRangoFund(isin) {
-  const vlMap  = VL_HISTORICO[isin] || {};
+  const vlMap  = vlGetHistorico(isin);
   const vlAct  = VL_PRECARGADOS[isin];
   const allVls = [...Object.values(vlMap), ...(vlAct?[vlAct]:[])].filter(Boolean);
   if (allVls.length < 2) return null;
@@ -7480,7 +7505,7 @@ function renderComparador() {
   const COLORS = ['#58a6ff','#34d399','#fb7185','#fbbf24','#a78bfa','#2dd4bf','#f97316','#e879f9'];
   let ci = 0;
   COMP_SELECCION.forEach(isin => {
-    const vlMap = VL_HISTORICO[isin]||{};
+    const vlMap = vlGetHistorico(isin);
     const pts   = M4.map(m=>vlMap[m]||(m===mesAct?VL_PRECARGADOS[isin]:null));
     // Determine base value: first value at/after baseMes, or first available
     let baseVal = null;
@@ -7539,7 +7564,7 @@ function renderComparador() {
   const TER_MAP = TER_POR_ISIN || {};
   const BM_R = BM_RETS_GLOBAL;
   tbody.innerHTML = [...COMP_SELECCION].map(isin => {
-    const vlMap  = VL_HISTORICO[isin]||{};
+    const vlMap  = vlGetHistorico(isin);
     const series = M4.map(m=>vlMap[m]||(m===mesAct?VL_PRECARGADOS[isin]:null)).filter(Boolean);
     if (series.length<2) return '';
     const rets   = [];
@@ -7627,7 +7652,7 @@ function renderFicha() {
   // Gráfico VL
   const M4 = MESES_DISPONIBLES;
   const mesAct = VL_FECHA.slice(6,10)+'-'+VL_FECHA.slice(3,5);
-  const vlMap  = VL_HISTORICO[isin]||{};
+  const vlMap  = vlGetHistorico(isin);
   const vlPts  = M4.map(m=>({mes:m,vl:vlMap[m]||(m===mesAct?VL_PRECARGADOS[isin]:null)})).filter(p=>p.vl);
   const elSub  = document.getElementById('ficha-vl-sub');
   if(elSub) elSub.textContent = vlPts.length>=2?`${vlPts.length} datos disponibles · ${vlPts[0].mes} → ${vlPts[vlPts.length-1].mes}`:'Sin datos históricos suficientes';
@@ -7721,7 +7746,7 @@ function renderFicha() {
     const M4 = MESES_DISPONIBLES;
     const mesAct2 = VL_FECHA.slice(6,10)+'-'+VL_FECHA.slice(3,5);
     Object.keys(VL_HISTORICO).forEach(id => {
-      const vlMap = VL_HISTORICO[id];
+      const vlMap = vlGetHistorico(id);
       const series = M4.map(m=>vlMap[m]||(m===mesAct2?VL_PRECARGADOS[id]:null)).filter(Boolean);
       if (series.length < 2) return;
       const rets = [];
@@ -7762,7 +7787,7 @@ function pearson(a, b) {
 const BM_RETS_GLOBAL = [1.50, -4.05, 3.43]; // feb, mar, abr MSCI World %
 
 function calcFundStats(isin) {
-  const vlMap  = VL_HISTORICO[isin] || {};
+  const vlMap  = vlGetHistorico(isin);
   const mesAct3= VL_FECHA.slice(6,10)+'-'+VL_FECHA.slice(3,5);
   const M4     = MESES_DISPONIBLES;
   const series = M4.map(m=>vlMap[m]||(m===mesAct3?VL_PRECARGADOS[isin]:null)).filter(Boolean);
@@ -7804,8 +7829,16 @@ try {
 
 // Precargar API key de Finnhub si ya estaba guardada (no hacer llamada automática al arrancar)
 // El usuario pulsa "Actualizar VL" cuando quiere actualizar
-fondosRebuildCaches(); // inicializar caches desde localStorage
-aplicarVLActuales();  // aplica VL desde localStorage + VL_HISTORICO
+// Inicializar en orden correcto al final del script (todas las funciones ya definidas)
+fondosRebuildCaches(); // popula ISIN_NAMES, ISIN_GEO, ISIN_TIPO desde localStorage
+vlInitFromCode();      // popula VL_HISTORICO, VL_PRECARGADOS desde localStorage
+// Rebuild activos con tipos correctos
+activos.forEach(a => {
+  if (ISIN_TIPO[a.isin])  a.tipo   = ISIN_TIPO[a.isin];
+  if (ISIN_GEO[a.isin])   a.geo    = ISIN_GEO[a.isin];
+  if (ISIN_NAMES[a.isin]) a.nombre = ISIN_NAMES[a.isin];
+});
+aplicarVLActuales();
 renderDashboardNew();
 
 // ════════════════════════════════════════════════════════
@@ -8224,7 +8257,7 @@ function renderHeatmap() {
       if (esCerrado && mes > ultimoMes) return null;
 
       // VL de este mes y del anterior
-      const vlMes  = (VL_HISTORICO[isin]||{})[mes] || (mes === mesActual ? VL_PRECARGADOS[isin] : null);
+      const vlMes  = (vlGetHistorico(isin)||{})[mes] || (mes === mesActual ? VL_PRECARGADOS[isin] : null);
       const mesPrev = meses[i-1];
       const vlPrev = mesPrev ? ((VL_HISTORICO[isin]||{})[mesPrev] || (mesPrev === mesActual ? VL_PRECARGADOS[isin] : null)) : null;
 
@@ -9533,7 +9566,6 @@ window.addEventListener('resize', () => {
             <svg viewBox="0 0 16 16"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M2 13h12"/></svg>
             Exportar CSV
           </button>
-          <button class="btn btn-ghost" onclick="testCORS()" style="font-size:11px;color:var(--text3)" title="Test CORS">🧪 Test</button>
           <button class="btn btn-ghost" id="btn-actualizar-vl" onclick="actualizarVLIronia()" style="font-size:11px" title="Obtener último VL desde ironia.tech">
             🔄 Actualizar VL
           </button>
