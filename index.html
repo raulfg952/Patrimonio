@@ -4617,10 +4617,18 @@ function vlSet(isin, mes, valor, fuente) {
   if (!data[isin]) data[isin] = {};
   data[isin][mes] = { v: +valor, f: fuente || 'manual' };
   vlSaveAll(data);
-  // Keep in-memory VL_HISTORICO in sync (monthly keys YYYY-MM only)
-  if (/^\d{4}-\d{2}$/.test(mes)) {
+  // Keep in-memory VL_HISTORICO in sync
+  // Acepta tanto YYYY-MM (mensual) como YYYY-MM-DD (diario de Yahoo)
+  const mesClave = /^\d{4}-\d{2}-\d{2}$/.test(mes) ? mes.slice(0, 7) : mes;
+  if (/^\d{4}-\d{2}$/.test(mesClave)) {
     if (!VL_HISTORICO[isin]) VL_HISTORICO[isin] = {};
-    VL_HISTORICO[isin][mes] = +valor;
+    // Solo sobreescribir si el valor es más reciente dentro del mes
+    const existing = VL_HISTORICO[isin][mesClave];
+    if (!existing || mes >= (VL_HISTORICO[isin].__lastDate?.[mesClave] || '')) {
+      VL_HISTORICO[isin][mesClave] = +valor;
+      if (!VL_HISTORICO[isin].__lastDate) VL_HISTORICO[isin].__lastDate = {};
+      VL_HISTORICO[isin].__lastDate[mesClave] = mes;
+    }
     VL_PRECARGADOS[isin] = +valor;
   }
 }
@@ -4788,7 +4796,7 @@ function renderVLTabla() {
     const nombre = (ISIN_NAMES[r.isin] || r.isin).slice(0,30);
     const fuenteMap = {
       'ironia':     ['Ironia.tech', 'var(--green)'],
-      'yahoo':      ['Yahoo Fin.',  'var(--accent)'],
+      'yahoo':      ['Actualización','var(--accent)'],
       'fin_de_mes': ['Fin de mes',  'var(--accent)'],
       'operacion':  ['Operación',   'var(--text3)'],
       'manual':     ['Manual',      'var(--green)'],
