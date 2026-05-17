@@ -5074,6 +5074,8 @@ async function actualizarVLIronia() {
           const ts   = meta?.regularMarketTime;
           if (vl && vl > 0) {
             const fecha = ts ? new Date(ts*1000).toISOString().slice(0,10) : today;
+            const daysDiff = (new Date(today) - new Date(fecha)) / (1000*60*60*24);
+            if (daysDiff > 30) { await new Promise(r => setTimeout(r, 800)); continue; }
             const mes   = fecha.slice(0,7);
             vlSet(isin, mes, vl, 'yahoo');
             ok++;
