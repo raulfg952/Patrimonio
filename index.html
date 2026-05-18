@@ -5033,12 +5033,11 @@ const YAHOO_SYMBOLS = {
 };
 
 // ── PROXY ────────────────────────────────────────────────────────────────
-const CORS_PROXY = 'https://api.allorigins.win/get?url=';
+const CORS_PROXY = 'https://broken-base-7b65.raulfg95.workers.dev/?url=';
 
 async function fetchProxy(url) {
   const r = await fetch(CORS_PROXY + encodeURIComponent(url));
-  const d = await r.json();
-  return d.contents;
+  return await r.text();
 }
 
 
@@ -5114,7 +5113,7 @@ async function actualizarVLIronia() {
   if (prog) prog.innerHTML = `<div style="color:var(--green);font-size:11px">✓ ${ok} fondos actualizados${fail>0?' · '+fail+' sin símbolo Yahoo':''}</div>`;
   const lastUpEl = document.getElementById('vl-last-update');
   if (lastUpEl) lastUpEl.textContent = 'Actualizado: ' + new Date().toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-  if (document.getElementById('ctab-vl')?.classList.contains('active')) renderVLTabla();
+  renderVLTabla();
 }
 
 // ── 2. CARGAR HISTÓRICO — Yahoo Finance via allorigins ────────────────────
