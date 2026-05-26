@@ -4970,23 +4970,30 @@ function vlDelete(isin, mes) {
 }
 
 function vlGetLatest(isin) {
-  // Devuelve el VL más reciente para un ISIN (de localStorage o VL_HISTORICO de código)
+  // Devuelve el VL mensual más reciente (YYYY-MM) — los diarios no se usan para valorar
   const data = vlGetAll();
   const local = data[isin];
-  
+
   // Merge con VL_HISTORICO del código (localStorage tiene prioridad)
   const merged = {};
   if (VL_HISTORICO[isin]) {
     Object.entries(VL_HISTORICO[isin]).forEach(([mes, v]) => {
-      merged[mes] = { v, f: 'historico' };
+      if (mes === '__lastDate') return;
+      if (/^\d{4}-\d{2}$/.test(mes)) merged[mes] = { v, f: 'historico' };
     });
   }
-  if (local) Object.assign(merged, local);
+  if (local) {
+    Object.entries(local).forEach(([mes, entry]) => {
+      if (/^\d{4}-\d{2}$/.test(mes)) merged[mes] = entry;
+    });
+  }
 
   const meses = Object.keys(merged).sort();
   if (!meses.length) return null;
+
   const ultimo = meses[meses.length - 1];
-  return { mes: ultimo, vl: merged[ultimo].v ?? merged[ultimo], fuente: merged[ultimo].f || 'historico' };
+  const entry  = merged[ultimo];
+  return { mes: ultimo, vl: entry?.v ?? entry, fuente: entry?.f || 'historico' };
 }
 
 function vlGetHistorico(isin) {
