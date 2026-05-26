@@ -1984,6 +1984,10 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
         <svg viewBox="0 0 16 16"><path d="M8 2v9M5 8l3 3 3-3"/><path d="M2 13h12"/></svg>
         Descargar CSV
       </button>
+      <button class="btn btn-ghost" style="color:var(--red)" onclick="eliminarTodasOps()">
+        <svg viewBox="0 0 16 16"><path d="M3 4h10M6 4V2h4v2M5 4v9h6V4"/></svg>
+        Eliminar todas
+      </button>
       <label class="btn btn-ghost" style="cursor:pointer" title="Importar operaciones desde CSV">
         <svg viewBox="0 0 16 16"><path d="M8 12V3M5 6l3-3 3 3"/><path d="M2 13h12"/></svg>
         Importar CSV
@@ -2815,7 +2819,7 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
       <div class="form-grid">
         <div class="form-grid form-g2">
           <div class="form-group"><label class="form-label">Tipo</label>
-            <select class="form-input" id="op-tipo">
+            <select class="form-input" id="op-tipo" onchange="updateImporteHint()">
               <option value="compra">Compra</option>
               <option value="traspaso">Traspaso</option>
               <option value="Reembolso">Reembolso</option>
@@ -2825,8 +2829,12 @@ hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
         <div class="form-group"><label class="form-label">Fondo (ISIN)</label><select class="form-input" id="op-isin"></select></div>
         <div class="form-grid form-g3">
           <div class="form-group"><label class="form-label">Participaciones</label><input type="number" class="form-input" id="op-partic" step="0.001" oninput="calcOpDesdePartic()"></div>
-          <div class="form-group"><label class="form-label">VL (€/participación)</label><input type="number" class="form-input" id="op-vl" step="0.0001" oninput="calcOpDesdeVL()"></div>
-          <div class="form-group"><label class="form-label">Importe total</label><input type="number" class="form-input" id="op-importe" step="0.01" oninput="calcOpDesdeImporte()"></div>
+          <div class="form-group"><label class="form-label" style="color:var(--text3)">VL (€/participación)</label><input type="number" class="form-input" id="op-vl" step="0.0001" disabled readonly style="background:var(--bg3);color:var(--text3);cursor:not-allowed" placeholder="Se calcula automáticamente"></div>
+          <div class="form-group">
+            <label class="form-label">Importe total</label>
+            <input type="number" class="form-input" id="op-importe" step="0.01" oninput="calcOpDesdeImporte(); updateImporteHint()">
+            <div id="op-importe-hint" style="font-size:10px;color:var(--text3);margin-top:4px"></div>
+          </div>
         </div>
         <div class="form-group"><label class="form-label">Nota</label><input type="text" class="form-input" id="op-nota" placeholder="Opcional"></div>
       </div>
@@ -3041,7 +3049,7 @@ const VL_HISTORICO_SEED = {};
 //  Formato: [fecha, isin, importe, participaciones, tipo, vl]
 // Limpieza defensiva: evitar que localStorage corrupto de versiones anteriores rompa el arranque
 (function safeLocalStorage() {
-  const keys = ['fintrack_notas','fintrack_target','fintrack_ob_registros','fintrack_precios_objetivo'];
+  const keys = ['fintrack_notas','fintrack_target','fintrack_ob_registros','fintrack_precios_objetivo','fintrack_ops'];
   keys.forEach(k => {
     const v = localStorage.getItem(k);
     if (v) { try { JSON.parse(v); } catch(e) { localStorage.removeItem(k); console.warn('Removed corrupt localStorage key:', k); } }
@@ -3052,7 +3060,15 @@ const VL_HISTORICO_SEED = {};
 //       calculado como abs(importe) / participaciones
 //       0 para acciones (no tienen VL de fondo)
 // ════════════════════════════════════════════════════════
-const RAW_OPS = [
+// ════════════════════════════════════════════════════════
+//  OPERACIONES — fuente de verdad: localStorage('fintrack_ops')
+//  Formato de cada op: { id, fecha, isin, importe, partic, tipo, vl }
+//  Al primer arranque se siembra con los datos históricos hardcodeados.
+// ════════════════════════════════════════════════════════
+
+// Seed histórico hardcodeado — solo se usa si localStorage está vacío
+const RAW_OPS_SEED = [
+  // [fecha, isin, importe, partic, tipo, vl]
   // [fecha, isin, importe, partic, tipo, VL_operacion]
   ['18/01/2026','IE00BYX5NX33',100.0,7.964,'Compra',12.5565],
   ['18/01/2026','INGRESO_MYINVESTOR',100.0,0,'Ingreso',0.0],
@@ -3178,13 +3194,66 @@ const RAW_OPS = [
   ['12/05/2026','IE00BYX5MD61',500.0,49.557,'Compra',10.0894],
 ];
 
-// Load any previously imported ops from localStorage
-(function() {
+// ── Capa de persistencia de operaciones ─────────────────
+const OPS_STORAGE_KEY = 'fintrack_ops';
+
+function opsLoad() {
   try {
-    const extra = JSON.parse(localStorage.getItem('extra_ops') || '[]');
-    if (extra.length) RAW_OPS.push(...extra);
-  } catch(e) {}
-})();
+    const saved = localStorage.getItem(OPS_STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch(e) { console.warn('fintrack_ops corrupt, reseeding'); }
+  return null;
+}
+
+function opsSave(opsArr) {
+  try { localStorage.setItem(OPS_STORAGE_KEY, JSON.stringify(opsArr)); } catch(e) {}
+}
+
+function opsSeed() {
+  // Convertir seed array a objetos con ID único
+  const seeded = RAW_OPS_SEED.map((r, i) => ({
+    id:     'seed_' + i,
+    fecha:  r[0],
+    isin:   r[1],
+    importe: r[2],
+    partic:  r[3],
+    tipo:    r[4],
+    vl:      r[5] || 0,
+  }));
+  opsSave(seeded);
+  return seeded;
+}
+
+// Cargar o sembrar operaciones
+let _allOps = opsLoad();
+if (!_allOps || !_allOps.length) _allOps = opsSeed();
+
+// RAW_OPS — array de arrays compatible con todo el código existente
+// Se reconstruye desde _allOps y se mantiene sincronizado
+let RAW_OPS = _allOps.map(o => [o.fecha, o.isin, o.importe, o.partic, o.tipo, o.vl, o.id]);
+
+// ── API pública de operaciones ──────────────────────────
+function opsGetAll()       { return _allOps; }
+
+function opsUpsert(op) {
+  // op debe tener id. Si existe → edita. Si no → añade.
+  const idx = _allOps.findIndex(o => o.id === op.id);
+  if (idx >= 0) _allOps[idx] = op;
+  else          _allOps.push(op);
+  opsSave(_allOps);
+  _syncRawOps();
+}
+
+function opsDelete(id) {
+  _allOps = _allOps.filter(o => o.id !== id);
+  opsSave(_allOps);
+  _syncRawOps();
+}
+
+function _syncRawOps() {
+  RAW_OPS.length = 0;
+  _allOps.forEach(o => RAW_OPS.push([o.fecha, o.isin, o.importe, o.partic, o.tipo, o.vl, o.id]));
+}
 
 // Aplicar VL del sistema al arrancar (después de construir portfolio)
 // Se llama también desde aplicarVLActuales() en cada cambio
@@ -3332,21 +3401,29 @@ let activos = Object.values(portfolio).map(p => {
 
 // Capital real invertido = dinero transferido desde banco (Ingresos) - reembolsos que volvieron al banco
 // Los traspasos y movimientos internos no cuentan
-const TOTAL_INGRESOS = RAW_OPS
+let TOTAL_INGRESOS = RAW_OPS
   .filter(r => r[4] === 'Ingreso')
   .reduce((s, r) => s + r[2], 0);
-const TOTAL_REEMBOLSOS_BANCO = RAW_OPS
+let TOTAL_REEMBOLSOS_BANCO = RAW_OPS
   .filter(r => r[4] === 'Reembolso' && r[2] < 0)
   .reduce((s, r) => s + Math.abs(r[2]), 0);
-const CAPITAL_REAL_NETO = +(TOTAL_INGRESOS - TOTAL_REEMBOLSOS_BANCO).toFixed(2);
-const DINERO_INVERTIDO_TOTAL = CAPITAL_REAL_NETO;
+let CAPITAL_REAL_NETO = +(TOTAL_INGRESOS - TOTAL_REEMBOLSOS_BANCO).toFixed(2);
+let DINERO_INVERTIDO_TOTAL = CAPITAL_REAL_NETO;
 
-let ops = RAW_OPS.filter(r => r[4] !== 'Ingreso' && r[4] !== 'Retirada').map((r, i) => ({
-  id: i, fecha: r[0], isin: r[1], importe: r[2], partic: r[3],
-  tipo_op: r[4] || (r[2] >= 0 ? 'Compra' : 'Reembolso'),
-  vl: r[5] || (r[3] > 0 ? +Math.abs(r[2] / r[3]).toFixed(4) : 0),
-  precio: r[5] || (r[3] > 0 ? +Math.abs(r[2] / r[3]).toFixed(4) : 0),
-}));
+// ops — vista de operaciones para la UI (excluye Ingresos/Retiradas)
+// Se construye desde _allOps para mantener IDs estables
+let ops = _allOps
+  .filter(o => o.tipo !== 'Retirada')
+  .map(o => ({
+    id:      o.id,
+    fecha:   o.fecha,
+    isin:    o.isin,
+    importe: o.importe,
+    partic:  o.partic,
+    tipo_op: o.tipo || (o.importe >= 0 ? 'Compra' : 'Reembolso'),
+    vl:      o.vl || (o.partic > 0 ? +Math.abs(o.importe / o.partic).toFixed(4) : 0),
+    precio:  o.vl || (o.partic > 0 ? +Math.abs(o.importe / o.partic).toFixed(4) : 0),
+  }));
 
 // ════════════════════════════════════════════════════════
 //  CHART.JS GLOBAL DEFAULTS — dark theme, branded tooltips
@@ -4717,20 +4794,23 @@ function importarCSVOps(input) {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (!lines.length) return showImportFeedback('Archivo vacío', 'error');
 
-    // Detect separator
-    const sep = lines[0].includes('\t') ? '\t' : ',';
-    const headers = lines[0].split(sep).map(h => h.trim().toLowerCase().replace(/[^a-záéíóú%()\w]/gi,''));
+    // Detect separator: tab, semicolon or comma
+    const sep = lines[0].includes('\t') ? '\t' : lines[0].includes(';') ? ';' : ',';
+    const headers = lines[0].split(sep).map(h =>
+      h.replace(/^\uFEFF/,'').trim().toLowerCase()
+       .normalize('NFD').replace(/[\u0300-\u036f]/g,'')  // quitar tildes
+       .replace(/[^a-z0-9]/g,' ').trim()                  // solo alfanumérico
+    );
 
     // Find column indices
     const iFecha  = headers.findIndex(h => h.includes('fecha'));
     const iISIN   = headers.findIndex(h => h === 'isin');
     const iImporte= headers.findIndex(h => h.includes('importe'));
     const iPartic = headers.findIndex(h => h.includes('participac'));
-    const iEstado = headers.findIndex(h => h.includes('estado'));
     const iTipo   = headers.findIndex(h => h.includes('tipo'));
 
-    if ([iFecha,iISIN,iImporte,iPartic,iEstado,iTipo].some(i=>i<0)) {
-      return showImportFeedback('No se reconocen las columnas. Asegúrate de que el CSV tiene: Fecha, ISIN, Importe, Participaciones, Estado, Tipo', 'error');
+    if ([iFecha,iISIN,iImporte,iPartic,iTipo].some(i=>i<0)) {
+      return showImportFeedback('No se reconocen las columnas. Asegúrate de que el CSV tiene: Fecha, ISIN, Importe, Participaciones, Tipo', 'error');
     }
 
     const parseNum = s => {
@@ -4747,12 +4827,10 @@ function importarCSVOps(input) {
       return s;
     };
 
-    // Load existing ops from localStorage
-    const stored = JSON.parse(localStorage.getItem('extra_ops') || '[]');
-    const existingKeys = new Set([
-      ...RAW_OPS.map(o => `${o[0]}|${o[1]}|${o[2]}|${o[3]}`),
-      ...stored.map(o => `${o[0]}|${o[1]}|${o[2]}|${o[3]}`)
-    ]);
+    // Load existing ops for dedup check
+    const existingKeys = new Set(
+      _allOps.map(o => `${o.fecha}|${o.isin}|${o.importe}|${o.partic}`)
+    );
 
     const TIPO_MAP = { 'compra':'Compra','venta':'Venta','traspaso':'Traspaso','reembolso':'Reembolso','ingreso':'Ingreso','suscripci':'Compra' };
 
@@ -4762,9 +4840,6 @@ function importarCSVOps(input) {
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(sep).map(c => c.trim().replace(/^"|"$/g,''));
       if (cols.length < 4) continue;
-
-      const estado = (cols[iEstado]||'').toLowerCase();
-      if (!estado.includes('finalizada')) { skipped++; continue; }
 
       const fecha  = parseFecha(cols[iFecha] || '');
       const isin   = (cols[iISIN] || '').trim();
@@ -4792,22 +4867,23 @@ function importarCSVOps(input) {
     }
 
     if (newOps.length === 0) {
-      return showImportFeedback(`Sin operaciones nuevas — ${duplicates} duplicadas, ${skipped} omitidas (no Finalizada)`, 'warn');
+      return showImportFeedback(`Sin operaciones nuevas${duplicates ? ' — '+duplicates+' duplicadas' : ''}`, 'warn');
     }
 
-    // Persist in localStorage
-    const allExtra = [...stored, ...newOps];
-    localStorage.setItem('extra_ops', JSON.stringify(allExtra));
-
-    // Merge into RAW_OPS and rebuild portfolio
-    RAW_OPS.push(...newOps);
+    // Persist: batch insert into _allOps, single localStorage write
+    const ts = Date.now();
+    newOps.forEach((r, i) => {
+      _allOps.push({ id: 'csv_' + ts + '_' + i, fecha: r[0], isin: r[1], importe: r[2], partic: r[3], tipo: r[4], vl: r[5] || 0 });
+    });
+    opsSave(_allOps);
+    _syncRawOps();
     rebuildPortfolio();
+    aplicarVLActuales();
     renderAll();
 
     showImportFeedback(
       `✓ ${added} operación${added!==1?'es':''} importada${added!==1?'s':''}` +
-      (duplicates ? ` · ${duplicates} duplicada${duplicates!==1?'s':''}` : '') +
-      (skipped    ? ` · ${skipped} omitida${skipped!==1?'s':''} (no Finalizada)` : ''),
+      (duplicates ? ` · ${duplicates} duplicada${duplicates!==1?'s':''}` : ''),
       'ok'
     );
   };
@@ -4825,24 +4901,8 @@ function showImportFeedback(msg, type) {
   if (type !== 'error') setTimeout(() => { el.style.display='none'; }, 6000);
 }
 
-function rebuildPortfolio() {
-  // Rebuild portfolio and activos from RAW_OPS
-  portfolio = {};
-  RAW_OPS.forEach(([fecha, isin, importe, partic, tipo]) => {
-    if (!portfolio[isin]) portfolio[isin] = { isin, partic_in:0, partic_out:0, euros_in:0, euros_neto:0 };
-    const p = portfolio[isin];
-    if (importe > 0) { p.partic_in += partic; p.euros_in += importe; p.euros_neto += importe; }
-    else             { p.partic_out += partic; p.euros_neto += importe; }
-  });
-  activos = Object.values(portfolio).map(p => {
-    const partic_neta = +(p.partic_in - p.partic_out).toFixed(3);
-    const cerrado     = partic_neta <= 0.001;
-    const coste       = p.partic_in > 0 ? +(p.euros_in / p.partic_in).toFixed(4) : 0;
-    return { isin: p.isin, participaciones: partic_neta, precio: VL_PRECARGADOS[p.isin] || 0,
-             coste, cerrado, nombre: ISIN_NAMES[p.isin] || p.isin,
-             total_aportado: p.euros_in, euros_neto: p.euros_neto };
-  });
-}
+
+
 
 function renderAll() {
   const cur = document.querySelector('.page.active')?.id?.replace('page-','');
@@ -6192,6 +6252,20 @@ function switchFondosTab(tab, btn) {
   if (tab === 'vl')      renderVLTabla();
 }
 
+function eliminarTodasOps() {
+  if (!confirm('¿Eliminar TODAS las operaciones? Esta acción no se puede deshacer.')) return;
+  if (!confirm('Segunda confirmación — se borrarán todas las operaciones permanentemente.')) return;
+  _allOps = [];
+  opsSave(_allOps);
+  _syncRawOps();
+  rebuildPortfolio();
+  aplicarVLActuales();
+  renderOperaciones();
+  renderDashboardNew();
+  renderCarteraKPIs();
+  renderCarteraTable();
+}
+
 function descargarOperaciones() {
   const header = ['Fecha','ISIN','Nombre','Importe (€)','Participaciones','VL operación','Tipo'];
   const rows = [...ops]
@@ -6254,9 +6328,15 @@ function renderOperaciones() {
   const last=[...ops].sort((a,b)=>parseDate(b.fecha)-parseDate(a.fecha))[0];
   document.getElementById('op-ultima').textContent=last?.fecha||'—';
 
-  // fill op modal isin select
+  // fill op modal isin select — todos los fondos del catálogo
   const osel=document.getElementById('op-isin');
-  osel.innerHTML=activos.map(a=>`<option value="${a.isin}">${a.nombre}</option>`).join('');
+  const fondosCatalogo = fondosGetAll ? fondosGetAll() : FONDOS_DEFAULT;
+  const fondosOrdenados = Object.entries(fondosCatalogo)
+    .filter(([isin]) => isin !== 'LIQUIDEZ_MYINVESTOR' && isin !== 'INGRESO_MYINVESTOR')
+    .sort(([,a],[,b]) => (a.nombre||'').localeCompare(b.nombre||''));
+  osel.innerHTML = fondosOrdenados
+    .map(([isin, f]) => `<option value="${isin}">${f.nombre || isin}</option>`)
+    .join('');
   document.getElementById('op-fecha').value=new Date().toISOString().slice(0,10);
 
   renderOpsTable();
@@ -6300,6 +6380,7 @@ function renderOpsTable(resetLimit = true) {
                        : 'color:var(--green)';
     const badge = tipo === 'Reembolso' ? '<span class="badge badge-red">Reembolso</span>'
                 : tipo === 'Traspaso'  ? `<span class="badge badge-amber">${esEntrada ? 'Traspaso ↓' : 'Traspaso ↑'}</span>`
+                : tipo === 'Ingreso'   ? '<span class="badge badge-blue">Ingreso</span>'
                 : '<span class="badge badge-green">Compra</span>';
     return `<tr>
       <td class="mono" style="font-size:11px">${o.fecha}</td>
@@ -6310,7 +6391,7 @@ function renderOpsTable(resetLimit = true) {
       <td class="mono" style="text-align:right;color:var(--text2)">${o.vl>0?fmtN(o.vl,4):'—'}</td>
       <td>${badge}</td>
       <td style="text-align:center">
-        <button onclick="editOp(${o.id})" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;cursor:pointer;color:var(--text2);font-size:10px" title="Editar operación">✏</button>
+        <button onclick="editOp('${o.id}')" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;cursor:pointer;color:var(--text2);font-size:10px" title="Editar operación">✏</button>
       </td>
     </tr>`;
   }).join('');
@@ -6334,24 +6415,33 @@ function opsShowMore() {
 }
 
 // Cálculo bidireccional: cualquiera de los 3 campos calcula los otros 2
-function calcOpDesdePartic() {
-  const p  = parseFloat(document.getElementById('op-partic').value) || 0;
-  const vl = parseFloat(document.getElementById('op-vl').value)     || 0;
-  if (p > 0 && vl > 0) document.getElementById('op-importe').value = (p * vl).toFixed(2);
+function calcOpDesdePartic() { _recalcVL(); }
+
+function updateImporteHint() {
+  const tipo = document.getElementById('op-tipo').value;
+  const hint = document.getElementById('op-importe-hint');
+  if (!hint) return;
+  if (tipo === 'traspaso') {
+    hint.innerHTML = '<span style="color:var(--green)">+ entrada al fondo</span> &nbsp;·&nbsp; <span style="color:var(--red)">− salida del fondo</span>';
+  } else if (tipo === 'Reembolso') {
+    hint.textContent = 'Introduce el importe en positivo — se guardará como negativo automáticamente';
+    hint.style.color = 'var(--amber)';
+  } else {
+    hint.textContent = '';
+  }
 }
-function calcOpDesdeVL() {
-  const p  = parseFloat(document.getElementById('op-partic').value) || 0;
-  const vl = parseFloat(document.getElementById('op-vl').value)     || 0;
-  const imp= parseFloat(document.getElementById('op-importe').value)|| 0;
-  if (p > 0 && vl > 0) document.getElementById('op-importe').value = (p * vl).toFixed(2);
-  else if (imp > 0 && vl > 0) document.getElementById('op-partic').value = (imp / vl).toFixed(3);
-}
-function calcOpDesdeImporte() {
-  const imp= parseFloat(document.getElementById('op-importe').value)|| 0;
-  const vl = parseFloat(document.getElementById('op-vl').value)     || 0;
-  const p  = parseFloat(document.getElementById('op-partic').value) || 0;
-  if (imp > 0 && vl > 0 && p === 0) document.getElementById('op-partic').value = (imp / vl).toFixed(3);
-  else if (imp > 0 && p > 0 && vl === 0) document.getElementById('op-vl').value = (imp / p).toFixed(4);
+function calcOpDesdeVL()     { /* VL es readonly — no hace nada */ }
+function calcOpDesdeImporte() { _recalcVL(); }
+
+function _recalcVL() {
+  const imp = parseFloat(document.getElementById('op-importe').value) || 0;
+  const p   = parseFloat(document.getElementById('op-partic').value)  || 0;
+  const vlEl = document.getElementById('op-vl');
+  if (imp > 0 && p > 0) {
+    vlEl.value = (imp / p).toFixed(4);
+  } else {
+    vlEl.value = '';
+  }
 }
 
 function editOp(id) {
@@ -6383,20 +6473,22 @@ function editOp(id) {
 
   // Valores numéricos (siempre positivos en el modal)
   document.getElementById('op-partic').value = o.partic > 0 ? o.partic : '';
-  document.getElementById('op-vl').value     = o.vl > 0 ? o.vl : '';
+  // VL se recalcula automáticamente desde importe y participaciones
+  document.getElementById('op-vl').value = (o.partic > 0 && o.importe !== 0) ? +(Math.abs(o.importe) / o.partic).toFixed(4) : '';
   document.getElementById('op-importe').value= o.importe !== 0 ? Math.abs(o.importe) : '';
 
   openModal('modal-op');
 }
 
 function deleteOp(confirmed) {
-  const id = +document.getElementById('op-edit-id').value;
+  const id = document.getElementById('op-edit-id').value;
   if (!id) return;
   if (!confirmed) {
     if (!confirm('¿Eliminar esta operación? Esta acción no se puede deshacer.')) return;
   }
-  const idx = ops.findIndex(x => x.id === id);
-  if (idx !== -1) ops.splice(idx, 1);
+  opsDelete(id);        // elimina de _allOps + localStorage + sincroniza RAW_OPS
+  rebuildPortfolio();   // recalcula activos, totales, ops UI
+  aplicarVLActuales();  // aplica VL del sistema
   closeModal('modal-op');
   renderOperaciones();
   renderDashboardNew();
@@ -6415,6 +6507,85 @@ function resetModalOp() {
   document.getElementById('op-fecha').value = new Date().toISOString().slice(0,10);
 }
 
+// ════════════════════════════════════════════════════════
+//  REBUILD PORTFOLIO — recalcula activos y derivados desde RAW_OPS
+//  Llamar siempre que RAW_OPS cambie (nueva op, edición, borrado)
+// ════════════════════════════════════════════════════════
+function rebuildPortfolio() {
+  // 1. Reconstruir portfolio desde RAW_OPS
+  const pf = {};
+  RAW_OPS.forEach(([fecha, isin, importe, partic, tipo]) => {
+    if (!pf[isin]) pf[isin] = { isin, partic_in:0, partic_out:0, euros_in:0, euros_neto:0 };
+    const p = pf[isin];
+    if (importe > 0) { p.partic_in += partic; p.euros_in += importe; p.euros_neto += importe; }
+    else             { p.partic_out += partic; p.euros_neto += importe; }
+  });
+
+  // 2. Recalcular COSTE_FIFO
+  const isinsUniq = [...new Set(RAW_OPS.map(r => r[1]).filter(i => i && i !== 'INGRESO_MYINVESTOR'))];
+  isinsUniq.forEach(isin => { COSTE_FIFO[isin] = calcCosteFIFO(isin); });
+
+  // 3. Reconstruir activos
+  activos = Object.values(pf).map(p => {
+    const partic_neta = +(p.partic_in - p.partic_out).toFixed(3);
+    const cerrado     = partic_neta <= 0.001;
+    const coste       = COSTE_FIFO[p.isin] || (p.partic_in > 0 ? +(p.euros_in / p.partic_in).toFixed(4) : 0);
+    const activoExist = activos.find(a => a.isin === p.isin);
+    return {
+      isin:            p.isin,
+      nombre:          ISIN_NAMES[p.isin] || p.isin,
+      tipo:            ISIN_TIPO[p.isin]  || 'fondo_activo',
+      geo:             ISIN_GEO[p.isin]   || 'Global',
+      participaciones: cerrado ? 0 : partic_neta,
+      coste,
+      // Conservar precio actual (VL importado) si ya existía; si no, usar coste
+      precio:          (activoExist && activoExist.precio !== activoExist.coste) ? activoExist.precio : coste,
+      total_aportado:  +p.euros_neto.toFixed(2),
+      cerrado,
+    };
+  }).sort((a, b) => b.total_aportado - a.total_aportado);
+
+  // 4. Añadir liquidez
+  const saldo = RAW_OPS.reduce((s,[,, importe,, tipo]) => {
+    if (tipo === 'Ingreso')   return s + importe;
+    if (tipo === 'Compra')    return s - importe;
+    if (tipo === 'Reembolso') return s + Math.abs(importe);
+    return s;
+  }, 0);
+  const liqSaldo = Math.max(0, +saldo.toFixed(2));
+  PARTIC_REALES['LIQUIDEZ_MYINVESTOR'] = liqSaldo;
+  const liqIdx = activos.findIndex(a => a.isin === 'LIQUIDEZ_MYINVESTOR');
+  const liqObj = { isin:'LIQUIDEZ_MYINVESTOR', nombre:'Liquidez MyInvestor', tipo:'liquidez', geo:'España', participaciones:liqSaldo, coste:1, precio:1, total_aportado:liqSaldo, cerrado:liqSaldo<=0 };
+  if (liqIdx >= 0) activos[liqIdx] = liqObj; else activos.push(liqObj);
+
+  // 5. Recalcular totales globales
+  TOTAL_INGRESOS       = RAW_OPS.filter(r => r[4]==='Ingreso').reduce((s,r)=>s+r[2],0);
+  TOTAL_REEMBOLSOS_BANCO = RAW_OPS.filter(r => r[4]==='Reembolso'&&r[2]<0).reduce((s,r)=>s+Math.abs(r[2]),0);
+  CAPITAL_REAL_NETO    = +(TOTAL_INGRESOS - TOTAL_REEMBOLSOS_BANCO).toFixed(2);
+  DINERO_INVERTIDO_TOTAL = CAPITAL_REAL_NETO;
+  window._TOTAL_INGRESOS_DYN     = TOTAL_INGRESOS;
+  window._TOTAL_REEMBOLSOS_DYN   = TOTAL_REEMBOLSOS_BANCO;
+
+  // 6. Reconstruir ops (vista UI) desde _allOps
+  ops.length = 0;
+  _allOps
+    .filter(o => o.tipo !== 'Retirada')
+    .forEach(o => {
+      ops.push({
+        id:      o.id,
+        fecha:   o.fecha,
+        isin:    o.isin,
+        importe: o.importe,
+        partic:  o.partic,
+        tipo_op: o.tipo || (o.importe >= 0 ? 'Compra' : 'Reembolso'),
+        vl:      o.vl || (o.partic > 0 ? +Math.abs(o.importe / o.partic).toFixed(4) : 0),
+        precio:  o.vl || (o.partic > 0 ? +Math.abs(o.importe / o.partic).toFixed(4) : 0),
+      });
+    });
+}
+
+// totalAportado() usa TOTAL_INGRESOS directamente (let, actualizada por rebuildPortfolio)
+
 function saveOp() {
   const vlVal    = parseFloat(document.getElementById('op-vl').value) || 0;
   const particVal= parseFloat(document.getElementById('op-partic').value) || 0;
@@ -6422,26 +6593,36 @@ function saveOp() {
   const tipoModal= document.getElementById('op-tipo').value;
   const isin     = document.getElementById('op-isin').value;
   const fecha    = document.getElementById('op-fecha').value.split('-').reverse().join('/');
-  const signo    = (tipoModal === 'venta' || tipoModal === 'Reembolso') ? -1 : 1;
+  const tipoStr  = tipoModal === 'compra' ? 'Compra' : tipoModal === 'traspaso' ? 'Traspaso' : 'Reembolso';
 
-  const o = {
-    id: Date.now(), fecha, isin,
-    importe: signo * Math.abs(impVal),
-    partic:  particVal,
-    vl:      vlVal,
-    precio:  vlVal || (particVal > 0 ? impVal / particVal : 0),
-    tipo_op: tipoModal === 'compra' ? 'Compra' : tipoModal === 'traspaso' ? 'Traspaso' : 'Reembolso',
-  };
-  const editId = +document.getElementById('op-edit-id').value;
+  const editId = document.getElementById('op-edit-id').value;
 
-  if (editId) {
-    // ── MODO EDICIÓN: reemplazar la operación existente ──────────
-    const idx = ops.findIndex(x => x.id === editId);
-    if (idx !== -1) ops[idx] = { ...ops[idx], ...o, id: editId };
+  // Traspaso: respetar el signo que mete el usuario (negativo = salida, positivo = entrada)
+  // Compra: siempre positivo. Reembolso/Venta: siempre negativo.
+  let importeFinal;
+  if (tipoStr === 'Traspaso') {
+    importeFinal = impVal; // respeta el signo tal cual
+  } else if (tipoStr === 'Reembolso') {
+    importeFinal = -Math.abs(impVal);
   } else {
-    // ── MODO NUEVA: añadir ────────────────────────────────────────
-    ops.push(o);
+    importeFinal = Math.abs(impVal);
   }
+  // VL siempre calculado desde importe y participaciones — nunca del campo manual
+  const vlCalculado = particVal > 0 ? +(Math.abs(impVal) / particVal).toFixed(4) : 0;
+
+  const op = {
+    id:      editId || ('user_' + Date.now()),
+    fecha,
+    isin,
+    importe: importeFinal,
+    partic:  particVal,
+    tipo:    tipoStr,
+    vl:      vlCalculado,
+  };
+
+  opsUpsert(op);        // guarda en _allOps + localStorage + sincroniza RAW_OPS
+  rebuildPortfolio();   // recalcula activos, totales, ops UI
+  aplicarVLActuales();  // aplica VL del sistema
 
   resetModalOp();
   closeModal('modal-op');
